@@ -148,7 +148,12 @@ body {
 }
 
 .map-preview.haven {
-  background: linear-gradient(135deg, #1e3a2f 40%, #2a3544 40%, #2a3544 60%, #3a2a1e 60%);
+  background:
+    linear-gradient(180deg, #2dd4bf 0%, #2dd4bf 18%, transparent 18%),
+    linear-gradient(90deg, transparent 35%, #ffc940 35%, #ffc940 65%, transparent 65%),
+    linear-gradient(135deg, #3d9970 0%, #3d9970 45%, transparent 45%),
+    linear-gradient(225deg, #c45c4a 55%, #c45c4a 100%);
+  background-color: #c8cdd8;
 }
 
 .map-card h3 {

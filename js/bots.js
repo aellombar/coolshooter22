@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { createWeaponState, getWeapon, canFire, fireWeapon, getRecoilOffset } from './weapons.js';
-import { resolveCollision, checkLineOfSight } from './map.js';
+import { resolveCollision, checkLineOfSight, getPatrolPoints } from './map.js';
 
 const BOT_NAMES = ['Jett', 'Reyna', 'Phoenix', 'Raze', 'Sage'];
+const PATROL_POINTS = getPatrolPoints();
 
 export class Bot {
   constructor(id, scene, colliders, spawnPos) {
@@ -47,15 +48,7 @@ export class Bot {
   }
 
   pickPatrolTarget() {
-    const points = [
-      new THREE.Vector3(-35, 1.6, -35),
-      new THREE.Vector3(35, 1.6, -35),
-      new THREE.Vector3(0, 1.6, -20),
-      new THREE.Vector3(-15, 1.6, -35),
-      new THREE.Vector3(15, 1.6, -35),
-      new THREE.Vector3(0, 1.6, -50),
-    ];
-    this.patrolTarget.copy(points[Math.floor(Math.random() * points.length)]);
+    this.patrolTarget.copy(PATROL_POINTS[Math.floor(Math.random() * PATROL_POINTS.length)]);
   }
 
   spawn(pos) {

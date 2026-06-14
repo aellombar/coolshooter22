@@ -26,8 +26,8 @@ export class Game {
     this.renderer.toneMappingExposure = 1.15;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x7a8ea8);
-    this.scene.fog = new THREE.Fog(0x9ab0c8, 60, 130);
+    this.scene.background = new THREE.Color(0x8aa8c8);
+    this.scene.fog = new THREE.Fog(0xa8c0d8, 45, 95);
 
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
     applyValorantFov(this.camera);
