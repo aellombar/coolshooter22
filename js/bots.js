@@ -137,6 +137,13 @@ export class Bot {
     this.nameTag = createNameLabel(this.name);
     this.mesh.add(this.nameTag);
 
+    // Reliable invisible hitbox for raycasts
+    const hitMat = new THREE.MeshBasicMaterial({ visible: false, depthWrite: false });
+    this.bodyHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.72, 0.72), hitMat);
+    this.bodyHitbox.position.y = 0.1;
+    this.bodyHitbox.userData = { bot: this, hitZone: 'body' };
+    this.mesh.add(this.bodyHitbox);
+
     this.mesh.position.copy(this.position);
     this.mesh.position.y = 0.9;
     scene.add(this.mesh);

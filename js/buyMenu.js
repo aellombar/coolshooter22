@@ -25,6 +25,13 @@ export function initBuyMenu(onBuy) {
   renderBuyMenu(null);
 }
 
+export function openBuyMenu(player) {
+  buyMenuOpen = true;
+  currentPlayer = player;
+  document.getElementById('buy-menu')?.classList.remove('hidden');
+  renderBuyMenu(player);
+}
+
 export function toggleBuyMenu(player) {
   buyMenuOpen = !buyMenuOpen;
   currentPlayer = player;

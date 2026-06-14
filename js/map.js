@@ -91,6 +91,20 @@ export function buildMap(scene) {
 
   const spawnPoint = new THREE.Vector3(0, 1.6, 34);
 
+  // Buy-phase barrier — blocks spawn exit until buy time ends
+  const barrierMat = new THREE.MeshStandardMaterial({
+    color: 0xff4655, transparent: true, opacity: 0.35,
+    emissive: 0xff4655, emissiveIntensity: 0.25,
+  });
+  const buyBarrierMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 4.5, 0.4), barrierMat);
+  buyBarrierMesh.position.set(0, 2.25, 27.8);
+  buyBarrierMesh.visible = false;
+  scene.add(buyBarrierMesh);
+  const buyBarrierCollider = {
+    min: { x: -3, y: 0, z: 27.6 },
+    max: { x: 3, y: 4.5, z: 28.0 },
+  };
+
   // ── ATTACKER SPAWN (south) ──
   floor(20, 12, 0, 34, floorMats.spawn);
   wall(20, 4, 0.5, 0, 0, 40.5, mats.wallA); // back
@@ -215,6 +229,9 @@ export function buildMap(scene) {
     plantSites,
     spawnPoint,
     defenderSpawns: getDefenderSpawns(),
+    buyBarrierMesh,
+    buyBarrierCollider,
+    spawnBounds: { minX: -9, maxX: 9, minZ: 28.5, maxZ: 41 },
   };
 }
 

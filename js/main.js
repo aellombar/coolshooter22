@@ -11,7 +11,14 @@ window.__startGame = startGame;
 initMenu(startGame);
 
 document.addEventListener('keydown', (e) => {
-  if (game?.running) game.onKeyDown(e.code);
+  if (game?.running) {
+    if (e.code === 'Tab') e.preventDefault();
+    game.onKeyDown(e.code);
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (game?.running) game.onKeyUp?.(e.code);
 });
 
 document.addEventListener('pointerlockchange', () => {
@@ -22,6 +29,7 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('mousemove', (e) => {
   if (!pointerLocked || !game?.running || !game.player?.alive) return;
   if (buyMenuModule?.isBuyMenuOpen()) return;
+  if (gameModule?.isScoreboardOpen?.()) return;
   game.player.onMouseMove(e.movementX, e.movementY);
 });
 
@@ -47,7 +55,7 @@ async function startGame() {
     if (!game) {
       game = new gm.Game(canvas);
       canvas.addEventListener('click', () => {
-        if (game?.running && !buyMenuModule?.isBuyMenuOpen()) {
+        if (game?.running && !buyMenuModule?.isBuyMenuOpen() && !gm.isScoreboardOpen?.()) {
           am.audio.unlock();
           game.requestPointerLock();
         }

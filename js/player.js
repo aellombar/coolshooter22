@@ -15,7 +15,8 @@ const JUMP_FORCE = Math.sqrt(2 * GRAVITY * JUMP_HEIGHT);
 const WALK_SPEED = 5.4;
 const SLOW_WALK_SPEED = 2.98;
 const CROUCH_SPEED = 2.74;
-const AIR_CONTROL = 0.22;
+const AIR_CONTROL = 0.72;
+const AIR_ACCEL = 12;
 const PLAYER_HEIGHT = 1.6;
 const PLAYER_CROUCH_HEIGHT = 1.0;
 
@@ -55,6 +56,8 @@ export class Player {
     this._wasJumpKey = false;
     this._eyeHeight = PLAYER_HEIGHT;
     this._footstepTimer = 0;
+    this.horizVel = new THREE.Vector3();
+    this.movementLocked = false;
 
     this.planting = false;
     this.plantProgress = 0;
@@ -96,6 +99,7 @@ export class Player {
     this.isScoped = false;
     this._eyeHeight = PLAYER_HEIGHT;
     this._footstepTimer = 0;
+    this.horizVel.set(0, 0, 0);
     this.viewModel.setWeapon('classic');
     this._updateScopeUI();
     this._updateCamera();
@@ -261,8 +265,9 @@ export class Player {
     }
   }
 
-  update(dt, plantSites) {
+  update(dt, plantSites, opts = {}) {
     if (!this.alive) return;
+    this.movementLocked = opts.movementLocked ?? false;
 
     const w = this.weapon;
 
@@ -296,19 +301,43 @@ export class Player {
     this.isSlowWalking = shiftHeld && !this.isCrouching && this.isGrounded && this.isMoving;
     if (this.isSlowWalking) speed = SLOW_WALK_SPEED;
 
-    const moveMul = this.isGrounded ? 1 : AIR_CONTROL;
-    if (this.isMoving) {
-      moveDir.normalize().multiplyScalar(speed * dt * moveMul);
-      this.position.add(moveDir);
+    if (!this.movementLocked) {
+      if (this.isGrounded) {
+        if (this.isMoving) {
+          moveDir.normalize().multiplyScalar(speed);
+          this.horizVel.copy(moveDir);
+          this.position.addScaledVector(this.horizVel, dt);
+        } else {
+          this.horizVel.multiplyScalar(Math.max(0, 1 - dt * 12));
+          if (this.horizVel.lengthSq() > 0.001) {
+            this.position.addScaledVector(this.horizVel, dt);
+          }
+        }
+      } else {
+        // Valorant air — keep jump momentum + partial air strafe
+        if (this.isMoving) {
+          const wishDir = moveDir.clone().normalize().multiplyScalar(speed * AIR_CONTROL);
+          this.horizVel.x = THREE.MathUtils.lerp(this.horizVel.x, wishDir.x, dt * AIR_ACCEL);
+          this.horizVel.z = THREE.MathUtils.lerp(this.horizVel.z, wishDir.z, dt * AIR_ACCEL);
+        }
+        this.horizVel.multiplyScalar(1 - dt * 0.35);
+        this.position.x += this.horizVel.x * dt;
+        this.position.z += this.horizVel.z * dt;
+      }
     }
 
     this._updateFootsteps(dt, speed);
 
     const wantsJump = this.keys['Space'] && !this._wasJumpKey;
     this._wasJumpKey = this.keys['Space'];
-    if (wantsJump && this.isGrounded && !this.isScoped && !this.isCrouching && !this.planting) {
+    if (wantsJump && this.isGrounded && !this.isScoped && !this.isCrouching && !this.planting && !this.movementLocked) {
       this.velocity.y = JUMP_FORCE;
       this.isGrounded = false;
+      // Carry run momentum into jump (Valorant)
+      if (!this.isMoving && this.horizVel.lengthSq() < 0.01) {
+        const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+        this.horizVel.copy(fwd.multiplyScalar(speed * 0.85));
+      }
     }
 
     this.velocity.y -= GRAVITY * dt;
@@ -323,7 +352,7 @@ export class Player {
       this.isGrounded = false;
     }
 
-    this.position = resolveCollision(this.position, this.colliders);
+    this.position = resolveCollision(this.position, opts.colliders ?? this.colliders);
     this._updateCamera();
     this.viewModel.update(dt, this.isMoving, this.isScoped, this.weapon.def.id);
     this._updateCrosshairBloom();
@@ -482,39 +511,40 @@ export class Player {
 
 export function raycastHit(origin, direction, targets, maxDist = 150, wallMeshes = []) {
   const dir = direction.clone().normalize();
-  const raycaster = new THREE.Raycaster(origin, dir, 0.05, maxDist);
+  const raycaster = new THREE.Raycaster(origin, dir, 0, maxDist);
   raycaster.camera = null;
+  raycaster.far = maxDist;
 
   for (const t of targets) {
     if (t.alive && t.mesh) t.mesh.updateMatrixWorld(true);
-  }
-  for (const mesh of wallMeshes) {
-    mesh.updateMatrixWorld?.(true);
-  }
-
-  // Closest wall blocks the shot
-  let wallDist = maxDist + 1;
-  if (wallMeshes.length > 0) {
-    const wallHits = raycaster.intersectObjects(wallMeshes, false);
-    if (wallHits.length > 0) wallDist = wallHits[0].distance;
   }
 
   const botRoots = targets.filter(t => t.alive && t.mesh).map(t => t.mesh);
   if (botRoots.length === 0) return null;
 
   const botHits = raycaster.intersectObjects(botRoots, true);
+  if (botHits.length === 0) return null;
+
   for (const hit of botHits) {
-    if (hit.distance >= wallDist) continue;
+    // Check wall occlusion up to this hit
+    if (wallMeshes.length > 0) {
+      for (const mesh of wallMeshes) mesh.updateMatrixWorld?.(true);
+      const wallRay = new THREE.Raycaster(origin, dir, 0, hit.distance - 0.02);
+      wallRay.camera = null;
+      const wallHits = wallRay.intersectObjects(wallMeshes, false);
+      if (wallHits.length > 0) continue;
+    }
 
     let obj = hit.object;
     let hitZone = hit.object.userData?.hitZone;
     while (obj) {
       const bot = obj.userData?.bot;
       if (bot?.alive) {
-        if (!hitZone) {
+        if (!hitZone || hitZone === 'body') {
           const rootY = bot.mesh.position.y;
-          if (hit.point.y >= rootY + 1.45) hitZone = 'head';
-          else if (hit.point.y <= rootY + 0.15) hitZone = 'leg';
+          const relY = hit.point.y - rootY;
+          if (relY >= 1.35) hitZone = 'head';
+          else if (relY <= 0.05) hitZone = 'leg';
           else hitZone = 'body';
         }
         return { target: bot, hit, hitZone, distance: hit.distance };

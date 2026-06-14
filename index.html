@@ -67,7 +67,11 @@
       <div class="hud-top">
         <div class="score-bar">
           <span class="team-score attack">0</span>
-          <span class="round-info">ROUND <span id="round-num">1</span></span>
+          <div class="round-timer-block">
+            <span class="phase-label buy" id="phase-label">BUY PHASE</span>
+            <span class="round-timer" id="round-timer">0:30</span>
+          </div>
+          <span class="round-info">R<span id="round-num">1</span></span>
           <span class="team-score defend">0</span>
         </div>
         <div class="credits">₵ <span id="credits">800</span></div>
@@ -131,6 +135,36 @@
 
     <div id="overlay-msg" class="hidden">
       <p id="overlay-text"></p>
+    </div>
+
+    <!-- Tab scoreboard -->
+    <div id="scoreboard" class="hidden">
+      <div class="sb-panel">
+        <div class="sb-header">
+          <div class="sb-scoreline">
+            <span class="sb-team attack">ATK <strong id="sb-attack-score">0</strong></span>
+            <span class="sb-round">ROUND <span id="sb-round">1</span></span>
+            <span class="sb-team defend">DEF <strong id="sb-defend-score">0</strong></span>
+          </div>
+          <p class="sb-hint">Hold Tab · Match stats</p>
+        </div>
+        <div class="sb-summary">
+          <span>W <strong id="sb-wins">0</strong></span>
+          <span>L <strong id="sb-losses">0</strong></span>
+          <span>K <strong id="sb-player-k">0</strong></span>
+          <span>D <strong id="sb-player-d">0</strong></span>
+          <span>HS <strong id="sb-player-hs">0</strong></span>
+          <span>DMG <strong id="sb-player-dmg">0</strong></span>
+        </div>
+        <table class="sb-table">
+          <thead>
+            <tr>
+              <th>Agent</th><th>K</th><th>D</th><th>A</th><th>KDA</th><th>DMG</th><th>ACS</th>
+            </tr>
+          </thead>
+          <tbody id="sb-rows"></tbody>
+        </table>
+      </div>
     </div>
 
     <canvas id="game-canvas"></canvas>

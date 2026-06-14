@@ -3,10 +3,15 @@ import { buildMap } from './map.js';
 import { Player, raycastHit, raycastPlayer, createBulletTracer, createHitMarker } from './player.js';
 import { createBotTeam, addKillFeed } from './bots.js';
 import { applyValorantFov, horizontalToVerticalFov, VALORANT_H_FOV } from './settings.js';
-import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
+import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, openBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
 import { getWeaponDamage } from './weapons.js';
 import { audio } from './audio.js';
 import { BulletDecalManager, raycastWallHit } from './bulletDecals.js';
+import { MatchStats } from './stats.js';
+import { initScoreboard, showScoreboard, updateScoreboard, updateTimerHUD, isScoreboardOpen } from './scoreboard.js';
+
+const BUY_TIME = 30;
+const ROUND_TIME = 100;
 
 export class Game {
   constructor(canvas) {
@@ -16,8 +21,10 @@ export class Game {
     this.attackScore = 0;
     this.defendScore = 0;
     this.roundPhase = 'buy';
-    this.roundTimer = 100;
+    this.buyTimer = BUY_TIME;
+    this.roundTimer = ROUND_TIME;
     this.spikePlanted = false;
+    this.stats = new MatchStats();
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -35,16 +42,15 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
     applyValorantFov(this.camera);
     this._targetVFov = this.camera.fov;
-    this._scopeFovBlend = 0;
 
     this.clock = new THREE.Clock();
+    initScoreboard();
     this._bindResize();
   }
 
   start() {
     this.running = false;
 
-    // Remove old player view-model from camera
     if (this.player?.viewModel?.group) {
       this.camera.remove(this.player.viewModel.group);
     }
@@ -53,11 +59,13 @@ export class Game {
 
     const mapData = buildMap(this.scene);
     this.colliders = mapData.colliders;
-    this.mapObjects = mapData.mapObjects;
     this.wallMeshes = mapData.wallMeshes;
     this.plantSites = mapData.plantSites;
     this.spawnPoint = mapData.spawnPoint;
     this.defenderSpawns = mapData.defenderSpawns;
+    this.buyBarrierMesh = mapData.buyBarrierMesh;
+    this.buyBarrierCollider = mapData.buyBarrierCollider;
+    this.spawnBounds = mapData.spawnBounds;
 
     this.player = new Player(
       this.camera,
@@ -70,39 +78,69 @@ export class Game {
     this.player.spawn(this.spawnPoint);
     this.player.credits = 800;
 
-    // Camera must be in scene graph for rendering
     this.scene.add(this.camera);
 
     this.bots = createBotTeam(this.scene, this.colliders, this.defenderSpawns);
     this.decalManager = new BulletDecalManager(this.scene);
 
+    this.stats.reset();
+    this.stats.initBots(this.bots);
+
     initBuyMenu((purchase) => this._handlePurchase(purchase));
 
-    this.roundPhase = 'buy';
-    this.roundTimer = 100;
-    this.spikePlanted = false;
     this.round = 1;
-    this._targetVFov = horizontalToVerticalFov(VALORANT_H_FOV, this.camera.aspect);
-    applyValorantFov(this.camera, this.camera.aspect);
+    this.attackScore = 0;
+    this.defendScore = 0;
+    this._startBuyPhase();
 
     audio.unlock();
 
     this._updateHUD();
-    this._showOverlay('ROUND 1 — BUY PHASE · You have the SPIKE (hold [4] at Site A or B)', 4000);
-    setTimeout(() => { this.roundPhase = 'combat'; }, 3000);
-
     this.running = true;
     if (!this._loopBound) this._loopBound = this._loop.bind(this);
     requestAnimationFrame(this._loopBound);
 
-    // Draw first frame immediately
     this.camera.updateMatrixWorld(true);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  _startBuyPhase() {
+    this.roundPhase = 'buy';
+    this.buyTimer = BUY_TIME;
+    this.spikePlanted = false;
+    if (this.buyBarrierMesh) this.buyBarrierMesh.visible = true;
+    openBuyMenu(this.player);
+    this._showOverlay(`ROUND ${this.round} — BUY PHASE (${BUY_TIME}s)`, 3500);
+  }
+
+  _endBuyPhase() {
+    if (this.roundPhase !== 'buy') return;
+    this.roundPhase = 'combat';
+    this.roundTimer = ROUND_TIME;
+    if (this.buyBarrierMesh) this.buyBarrierMesh.visible = false;
+    closeBuyMenu();
+    this._showOverlay('FIGHT!', 1500);
+  }
+
+  _getActiveColliders() {
+    const c = [...this.colliders];
+    if (this.roundPhase === 'buy' && this.buyBarrierCollider) {
+      c.push(this.buyBarrierCollider);
+    }
+    return c;
+  }
+
+  _clampToSpawn() {
+    if (this.roundPhase !== 'buy' || !this.spawnBounds) return;
+    const b = this.spawnBounds;
+    this.player.position.x = THREE.MathUtils.clamp(this.player.position.x, b.minX, b.maxX);
+    this.player.position.z = THREE.MathUtils.clamp(this.player.position.z, b.minZ, b.maxZ);
   }
 
   stop() {
     this.running = false;
     document.exitPointerLock?.();
+    showScoreboard(false);
   }
 
   _loop() {
@@ -111,16 +149,22 @@ export class Game {
 
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
-    if (this.roundPhase === 'combat') {
+    if (this.roundPhase === 'buy') {
+      this.buyTimer -= dt;
+      if (this.buyTimer <= 0) this._endBuyPhase();
+    } else if (this.roundPhase === 'combat') {
       this.roundTimer -= dt;
       if (this.roundTimer <= 0) this._endRound('defenders');
     }
 
     if (this.player) {
-      this.player.update(dt, this.plantSites);
+      this.player.update(dt, this.plantSites, {
+        colliders: this._getActiveColliders(),
+        movementLocked: false,
+      });
+      this._clampToSpawn();
     }
 
-    // Only the closest bot shoots at a time
     const livingBots = (this.bots ?? []).filter(b => b.alive);
     livingBots.sort((a, b) =>
       a.position.distanceTo(this.player.position) - b.position.distanceTo(this.player.position)
@@ -128,6 +172,7 @@ export class Game {
     const closestId = livingBots[0]?.id;
 
     for (const bot of this.bots ?? []) {
+      if (this.roundPhase !== 'combat') continue;
       const priority = bot.id === closestId ? 0 : 1;
       const shot = bot.update(dt, this.player, this.colliders, priority);
       if (shot) this._handleBotShot(shot);
@@ -142,6 +187,8 @@ export class Game {
     }
 
     this._updateHUD();
+    updateTimerHUD(this);
+    updateScoreboard(this);
     this._updateScopedFov(dt);
 
     this.camera.updateMatrixWorld(true);
@@ -163,7 +210,9 @@ export class Game {
   }
 
   _handlePlayerShot({ hitOrigin, muzzle, direction, weaponDef }) {
-    const maxDist = (weaponDef.range ?? 50) * 3;
+    if (this.roundPhase === 'buy') return;
+
+    const maxDist = Math.max(120, (weaponDef.range ?? 50) * 4);
     const hit = raycastHit(hitOrigin, direction, this.bots, maxDist, this.wallMeshes ?? []);
     const wallHit = raycastWallHit(hitOrigin, direction, this.wallMeshes ?? [], maxDist);
     const hitPoint = hit ? hit.hit.point : (wallHit ? wallHit.point : null);
@@ -175,26 +224,30 @@ export class Game {
 
     if (hit) {
       const dmg = getWeaponDamage(weaponDef, hit.hitZone);
+      this.stats.recordPlayerHit(dmg, hit.hitZone);
       hit.target.takeDamage(dmg, hit.hitZone);
       createHitMarker();
 
       if (!hit.target.alive) {
         this.player.credits += 200;
+        this.stats.recordPlayerKill(hit.target.id, hit.target.name);
         addKillFeed('You', hit.target.name, weaponDef.name);
       }
     }
   }
 
   _handleBotShot(shot) {
-    if (!this.player.alive) return;
+    if (!this.player.alive || this.roundPhase !== 'combat') return;
 
     const hit = raycastPlayer(shot.origin, shot.direction, this.player, 50);
     if (!hit) return;
 
     const dmg = getWeaponDamage(shot.weaponDef, hit.hitZone);
+    this.stats.recordPlayerDamageTaken(dmg);
     this.player.takeDamage(dmg, hit.hitZone);
 
     if (!this.player.alive) {
+      this.stats.recordPlayerDeath(shot.shooter.name);
       addKillFeed(shot.shooter.name, 'You', shot.weaponDef.name);
     }
   }
@@ -208,13 +261,9 @@ export class Game {
 
   _handlePurchase(purchase) {
     if (purchase.type === 'weapon') {
-      if (this.player.buyWeapon(purchase.id)) {
-        updateBuyCredits(this.player.credits);
-      }
+      if (this.player.buyWeapon(purchase.id)) updateBuyCredits(this.player.credits);
     } else if (purchase.type === 'armor') {
-      if (this.player.buyArmor(purchase.id)) {
-        updateBuyCredits(this.player.credits);
-      }
+      if (this.player.buyArmor(purchase.id)) updateBuyCredits(this.player.credits);
     }
   }
 
@@ -224,10 +273,12 @@ export class Game {
 
     if (winner === 'attackers') {
       this.attackScore++;
+      this.stats.recordRoundWin();
       this.player.credits += 3000;
       this._showOverlay('ROUND WON', 3000);
     } else {
       this.defendScore++;
+      this.stats.recordRoundLoss();
       this.player.credits += 1900;
       this._showOverlay('ROUND LOST', 3000);
     }
@@ -237,8 +288,6 @@ export class Game {
 
   _newRound() {
     this.round++;
-    this.roundPhase = 'buy';
-    this.roundTimer = 100;
     this.spikePlanted = false;
 
     this.player.spawn(this.spawnPoint);
@@ -248,10 +297,10 @@ export class Game {
 
     for (let i = 0; i < this.bots.length; i++) {
       this.bots[i].spawn(this.defenderSpawns[i]);
+      this.stats.bots[i].alive = true;
     }
 
-    this._showOverlay(`ROUND ${this.round} — BUY PHASE · Plant the spike at A or B`, 3500);
-    setTimeout(() => { this.roundPhase = 'combat'; }, 3000);
+    this._startBuyPhase();
   }
 
   _updateHUD() {
@@ -275,7 +324,19 @@ export class Game {
     setTimeout(() => overlay.classList.add('hidden'), duration);
   }
 
+  toggleScoreboard(show) {
+    showScoreboard(show);
+    if (show) {
+      document.exitPointerLock?.();
+      updateScoreboard(this);
+    }
+  }
+
   onKeyDown(code) {
+    if (code === 'Tab') {
+      this.toggleScoreboard(true);
+      return;
+    }
     if (code === 'KeyB') {
       if (this.roundPhase === 'buy' || this.roundPhase === 'combat') {
         toggleBuyMenu(this.player);
@@ -283,11 +344,16 @@ export class Game {
     }
     if (code === 'Escape') {
       if (isBuyMenuOpen()) closeBuyMenu();
+      else showScoreboard(false);
     }
   }
 
+  onKeyUp(code) {
+    if (code === 'Tab') showScoreboard(false);
+  }
+
   requestPointerLock() {
-    if (!isBuyMenuOpen()) {
+    if (!isBuyMenuOpen() && !isScoreboardOpen()) {
       audio.unlock();
       this.canvas.requestPointerLock();
     }
@@ -319,3 +385,5 @@ export function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id)?.classList.add('active');
 }
+
+export { isScoreboardOpen } from './scoreboard.js';

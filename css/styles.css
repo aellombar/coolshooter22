@@ -245,6 +245,30 @@ input[type="range"] {
   opacity: 0.7;
 }
 
+.round-timer-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 4.5rem;
+}
+
+.phase-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  opacity: 0.65;
+}
+
+.phase-label.buy { color: var(--valorant-gold); }
+.phase-label.combat { color: var(--valorant-accent); }
+.phase-label.combat.planted { color: var(--valorant-red); }
+
+.round-timer {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
 .credits {
   font-size: 1.2rem;
   font-weight: 700;
@@ -759,3 +783,88 @@ input[type="range"] {
   letter-spacing: 0.15em;
   color: var(--valorant-red);
 }
+
+/* Tab scoreboard */
+#scoreboard {
+  position: absolute;
+  inset: 0;
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 14, 22, 0.82);
+  pointer-events: none;
+}
+
+#scoreboard.hidden {
+  display: none !important;
+}
+
+.sb-panel {
+  width: min(720px, 92vw);
+  background: rgba(12, 20, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 1rem 1.25rem;
+}
+
+.sb-header {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sb-scoreline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.sb-team.attack { color: var(--valorant-green); }
+.sb-team.defend { color: var(--valorant-red); }
+
+.sb-hint {
+  font-size: 0.65rem;
+  opacity: 0.4;
+  margin-top: 0.35rem;
+  text-align: center;
+}
+
+.sb-summary {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.85;
+}
+
+.sb-summary strong {
+  color: var(--valorant-gold);
+  margin-left: 0.2rem;
+}
+
+.sb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.sb-table th {
+  text-align: left;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  opacity: 0.45;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sb-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.sb-table tr.team-attack .sb-name { color: var(--valorant-green); }
+.sb-table tr.team-defend .sb-name { color: var(--valorant-red); }
+.sb-table tr.dead { opacity: 0.4; }
