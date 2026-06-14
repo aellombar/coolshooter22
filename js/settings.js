@@ -1,17 +1,17 @@
 /**
- * Valorant-accurate mouse sensitivity system.
+ * Valorant-accurate mouse sensitivity and fixed FOV.
  *
  * Valorant uses m_yaw / m_pitch = 0.07 degrees per mouse count at sensitivity 1.0.
- * Browser mousemove reports pixel deltas which map 1:1 to in-game counts.
+ * Horizontal FOV is fixed at 103 degrees (not adjustable in Valorant).
  */
 export const VALORANT_M_YAW = 0.07;
 export const VALORANT_M_PITCH = 0.07;
+export const VALORANT_H_FOV = 103;
 
 const STORAGE_KEY = 'tacticalShooterSettings';
 
 const defaults = {
   sensitivity: 0.5,
-  fov: 103,
   invertY: false,
 };
 
@@ -34,12 +34,9 @@ export function getSettings() {
 }
 
 export function setSensitivity(val) {
-  settings.sensitivity = Math.max(0.1, Math.min(10, val));
-  saveSettings();
-}
-
-export function setFov(val) {
-  settings.fov = Math.max(80, Math.min(120, val));
+  const n = parseFloat(val);
+  if (Number.isNaN(n)) return;
+  settings.sensitivity = Math.max(0.01, Math.min(10, Math.round(n * 100) / 100));
   saveSettings();
 }
 
@@ -48,26 +45,30 @@ export function setInvertY(val) {
   saveSettings();
 }
 
-/**
- * Convert mouse delta to yaw rotation in radians (Valorant formula).
- */
+/** Convert Valorant horizontal FOV to Three.js vertical FOV. */
+export function horizontalToVerticalFov(hFovDeg, aspect) {
+  const hRad = (hFovDeg * Math.PI) / 180;
+  const vRad = 2 * Math.atan(Math.tan(hRad / 2) / aspect);
+  return (vRad * 180) / Math.PI;
+}
+
+/** Apply fixed Valorant 103° horizontal FOV to a PerspectiveCamera. */
+export function applyValorantFov(camera, aspect = camera.aspect) {
+  camera.fov = horizontalToVerticalFov(VALORANT_H_FOV, aspect);
+  camera.updateProjectionMatrix();
+}
+
 export function mouseDeltaToYaw(deltaX) {
   const deg = deltaX * settings.sensitivity * VALORANT_M_YAW;
   return deg * (Math.PI / 180);
 }
 
-/**
- * Convert mouse delta to pitch rotation in radians (Valorant formula).
- */
 export function mouseDeltaToPitch(deltaY) {
   const sign = settings.invertY ? -1 : 1;
   const deg = deltaY * settings.sensitivity * VALORANT_M_PITCH * sign;
   return deg * (Math.PI / 180);
 }
 
-/**
- * Degrees turned per pixel at current sensitivity (for UI display).
- */
 export function degreesPerPixel() {
   return settings.sensitivity * VALORANT_M_YAW;
 }

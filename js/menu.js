@@ -1,4 +1,4 @@
-import { loadSettings, getSettings, setSensitivity, setFov, setInvertY, degreesPerPixel } from './settings.js';
+import { loadSettings, getSettings, setSensitivity, setInvertY } from './settings.js';
 import { showScreen, hideAllMenus, showHUD } from './game.js';
 
 let onStartGame = null;
@@ -22,15 +22,24 @@ function bindMenuEvents() {
   });
 
   const sensSlider = document.getElementById('sens-slider');
+  const sensInput = document.getElementById('sens-input');
+
   sensSlider.addEventListener('input', () => {
     setSensitivity(parseFloat(sensSlider.value));
     syncSettingsUI();
   });
 
-  const fovSlider = document.getElementById('fov-slider');
-  fovSlider.addEventListener('input', () => {
-    setFov(parseInt(fovSlider.value));
+  sensInput.addEventListener('change', () => {
+    setSensitivity(parseFloat(sensInput.value));
     syncSettingsUI();
+  });
+
+  sensInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      setSensitivity(parseFloat(sensInput.value));
+      syncSettingsUI();
+      sensInput.blur();
+    }
   });
 
   document.getElementById('invert-y').addEventListener('change', (e) => {
@@ -41,9 +50,7 @@ function bindMenuEvents() {
 function syncSettingsUI() {
   const s = getSettings();
   document.getElementById('sens-slider').value = s.sensitivity;
-  document.getElementById('sens-value').textContent = s.sensitivity.toFixed(2);
-  document.getElementById('fov-slider').value = s.fov;
-  document.getElementById('fov-value').textContent = s.fov;
+  document.getElementById('sens-input').value = s.sensitivity.toFixed(2);
   document.getElementById('invert-y').checked = s.invertY;
 }
 

@@ -41,16 +41,17 @@
       <div class="menu-panel">
         <h2>SETTINGS</h2>
         <div class="setting-row">
-          <label for="sens-slider">Mouse Sensitivity</label>
-          <span id="sens-value">0.50</span>
+          <label for="sens-input">Mouse Sensitivity</label>
         </div>
-        <input type="range" id="sens-slider" min="0.1" max="10" step="0.01" value="0.5">
-        <p class="setting-hint">Uses Valorant sensitivity formula (0.07° per count × sens)</p>
+        <div class="sens-controls">
+          <input type="range" id="sens-slider" min="0.01" max="10" step="0.01" value="0.5">
+          <input type="number" id="sens-input" min="0.01" max="10" step="0.01" value="0.50">
+        </div>
+        <p class="setting-hint">Valorant formula: 0.07° per count × sensitivity</p>
         <div class="setting-row">
-          <label for="fov-slider">Field of View</label>
-          <span id="fov-value">103</span>
+          <label>Field of View</label>
+          <span class="setting-fixed">103° (fixed, same as Valorant)</span>
         </div>
-        <input type="range" id="fov-slider" min="80" max="120" step="1" value="103">
         <div class="setting-row">
           <label for="invert-y">Invert Y-Axis</label>
           <input type="checkbox" id="invert-y">
@@ -95,16 +96,18 @@
     <!-- Buy Menu -->
     <div id="buy-menu" class="hidden">
       <div class="buy-panel">
-        <h2>BUY MENU <span class="buy-key">[B]</span></h2>
-        <div class="buy-categories">
-          <button class="buy-tab active" data-cat="sidearms">Sidearms</button>
-          <button class="buy-tab" data-cat="smgs">SMGs</button>
-          <button class="buy-tab" data-cat="rifles">Rifles</button>
-          <button class="buy-tab" data-cat="snipers">Snipers</button>
-          <button class="buy-tab" data-cat="armor">Armor</button>
+        <div class="buy-header">
+          <h2>BUY MENU</h2>
+          <div class="buy-meta">
+            <span class="buy-credits-display">₵ <span id="buy-credits">800</span></span>
+            <span class="buy-close-hint">[B] or [Esc] to close</span>
+          </div>
         </div>
-        <div class="buy-grid" id="buy-grid"></div>
-        <p class="buy-hint">Click to buy · Credits: ₵<span id="buy-credits">800</span></p>
+        <div class="buy-slots">
+          <div class="buy-slot"><span class="slot-key">1</span> Primary: <strong id="slot-primary">—</strong></div>
+          <div class="buy-slot"><span class="slot-key">2</span> Secondary: <strong id="slot-secondary">Classic</strong></div>
+        </div>
+        <div id="buy-sections" class="buy-sections"></div>
       </div>
     </div>
 

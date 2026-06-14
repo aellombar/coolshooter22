@@ -9,10 +9,10 @@ export function buildMap(scene) {
   const colliders = [];
   const plantSites = {};
 
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x3a4555, roughness: 0.9 });
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x5a6575, roughness: 0.85 });
-  const siteAMat = new THREE.MeshStandardMaterial({ color: 0x2a5540, roughness: 0.8 });
-  const siteBMat = new THREE.MeshStandardMaterial({ color: 0x55402a, roughness: 0.8 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x6a7585, roughness: 0.85 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x8a95a5, roughness: 0.8 });
+  const siteAMat = new THREE.MeshStandardMaterial({ color: 0x3a7560, roughness: 0.75 });
+  const siteBMat = new THREE.MeshStandardMaterial({ color: 0x756040, roughness: 0.75 });
   const accentMat = new THREE.MeshStandardMaterial({ color: 0xff4655, roughness: 0.6, emissive: 0xff4655, emissiveIntensity: 0.3 });
   const spawnMat = new THREE.MeshStandardMaterial({ color: 0x0fb5ae, roughness: 0.8 });
 
@@ -103,13 +103,17 @@ export function buildMap(scene) {
   createSiteLabel(scene, mapObjects, 'A', -35, 3, -35);
   createSiteLabel(scene, mapObjects, 'B', 35, 3, -35);
 
-  // Lighting
-  const ambient = new THREE.AmbientLight(0x8899aa, 0.5);
+  // Lighting — bright, outdoor feel
+  const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x8a9080, 0.65);
+  scene.add(hemi);
+  mapObjects.push(hemi);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.45);
   scene.add(ambient);
   mapObjects.push(ambient);
 
-  const sun = new THREE.DirectionalLight(0xffeedd, 0.8);
-  sun.position.set(30, 50, 20);
+  const sun = new THREE.DirectionalLight(0xfff5e8, 1.2);
+  sun.position.set(40, 60, 30);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;

@@ -171,9 +171,30 @@ body {
 }
 
 input[type="range"] {
-  width: 100%;
+  flex: 1;
   accent-color: var(--valorant-red);
+}
+
+.sens-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
   margin-bottom: 0.5rem;
+}
+
+#sens-input {
+  width: 72px;
+  padding: 0.35rem 0.5rem;
+  background: var(--valorant-dark);
+  border: 1px solid #444;
+  color: var(--valorant-accent);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.setting-fixed {
+  font-size: 0.85rem;
+  opacity: 0.7;
 }
 
 .setting-hint {
@@ -346,94 +367,138 @@ input[type="range"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(8, 14, 22, 0.75);
   pointer-events: all;
 }
 
 .buy-panel {
-  background: var(--valorant-panel);
-  border: 2px solid var(--valorant-red);
-  padding: 1.5rem 2rem;
-  min-width: 600px;
-  max-width: 90vw;
+  background: rgba(15, 25, 35, 0.96);
+  border: 1px solid rgba(255, 70, 85, 0.5);
+  padding: 1.25rem 1.5rem;
+  width: min(920px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
 }
 
-.buy-panel h2 {
-  margin-bottom: 1rem;
-  letter-spacing: 0.1em;
-}
-
-.buy-key {
-  font-size: 0.75rem;
-  opacity: 0.5;
-}
-
-.buy-categories {
+.buy-header {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.buy-tab {
-  padding: 0.4rem 0.8rem;
-  background: transparent;
-  border: 1px solid #444;
-  color: var(--valorant-accent);
-  cursor: pointer;
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
-}
-
-.buy-tab.active {
-  border-color: var(--valorant-red);
+.buy-header h2 {
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
   color: var(--valorant-red);
 }
 
-.buy-grid {
+.buy-meta {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  font-size: 0.8rem;
+}
+
+.buy-credits-display {
+  color: var(--valorant-gold);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.buy-close-hint {
+  opacity: 0.45;
+}
+
+.buy-slots {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.buy-slot strong {
+  color: var(--valorant-accent);
+}
+
+.buy-slot strong.active-slot {
+  color: var(--valorant-green);
+}
+
+.slot-key {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  font-size: 0.7rem;
+  margin-right: 0.35rem;
+}
+
+.buy-sections {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-  min-height: 200px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.buy-section h3 {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  opacity: 0.5;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.buy-section-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .buy-item {
-  border: 1px solid #333;
-  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--valorant-accent);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+  font-family: inherit;
 }
 
-.buy-item:hover {
+.buy-item:hover:not(.disabled) {
   border-color: var(--valorant-red);
-  background: rgba(255, 70, 85, 0.1);
+  background: rgba(255, 70, 85, 0.08);
 }
 
 .buy-item.disabled {
-  opacity: 0.4;
-  pointer-events: none;
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
-.buy-item .name {
+.buy-item-name {
   font-weight: 700;
-  font-size: 0.9rem;
-}
-
-.buy-item .price {
-  color: var(--valorant-gold);
   font-size: 0.85rem;
 }
 
-.buy-item .desc {
-  font-size: 0.7rem;
-  opacity: 0.6;
-  margin-top: 0.25rem;
+.buy-item-price {
+  color: var(--valorant-gold);
+  font-size: 0.8rem;
 }
 
-.buy-hint {
-  margin-top: 1rem;
-  font-size: 0.75rem;
+.buy-item-tag {
+  font-size: 0.65rem;
   opacity: 0.5;
-  text-align: center;
 }
 
 /* Overlay */

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { buildMap, checkLineOfSight } from './map.js';
+import { buildMap } from './map.js';
 import { Player, raycastHit, createBulletTracer, createHitMarker } from './player.js';
 import { createBotTeam, addKillFeed } from './bots.js';
-import { getSettings } from './settings.js';
+import { applyValorantFov } from './settings.js';
 import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
-import { getWeapon } from './weapons.js';
+import { audio } from './audio.js';
 
 export class Game {
   constructor(canvas) {
@@ -13,7 +13,7 @@ export class Game {
     this.round = 1;
     this.attackScore = 0;
     this.defendScore = 0;
-    this.roundPhase = 'buy'; // buy, combat, ended
+    this.roundPhase = 'buy';
     this.roundTimer = 100;
     this.spikePlanted = false;
 
@@ -22,20 +22,21 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a2535);
-    this.scene.fog = new THREE.Fog(0x1a2535, 40, 90);
+    this.scene.background = new THREE.Color(0x7a8ea8);
+    this.scene.fog = new THREE.Fog(0x9ab0c8, 60, 130);
 
-    const settings = getSettings();
-    this.camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    applyValorantFov(this.camera);
 
     this.clock = new THREE.Clock();
     this._bindResize();
   }
 
   start() {
-    // Clean previous
     while (this.scene.children.length) this.scene.remove(this.scene.children[0]);
 
     const mapData = buildMap(this.scene);
@@ -46,9 +47,9 @@ export class Game {
 
     this.player = new Player(
       this.camera,
+      this.scene,
       this.colliders,
       (origin, dir, weaponDef) => this._handlePlayerShot(origin, dir, weaponDef),
-      () => {}
     );
     this.player.onPlant = (site) => this._handlePlant(site);
     this.player.spawn(this.spawnPoint);
@@ -63,6 +64,8 @@ export class Game {
     this.roundTimer = 100;
     this.spikePlanted = false;
     this.round = 1;
+
+    audio.unlock();
 
     this._updateHUD();
     this._showOverlay('ROUND 1 — BUY PHASE', 2500);
@@ -92,18 +95,15 @@ export class Game {
 
     this.player.update(dt, this.plantSites);
 
-    // Bot updates
     for (const bot of this.bots) {
       const shot = bot.update(dt, this.player, this.colliders);
       if (shot) this._handleBotShot(shot);
     }
 
-    // Check round end — all bots dead
     if (this.bots.every(b => !b.alive) && this.roundPhase === 'combat') {
       this._endRound('attackers');
     }
 
-    // Check player death
     if (!this.player.alive && this.roundPhase === 'combat') {
       this._endRound('defenders');
     }
@@ -225,31 +225,22 @@ export class Game {
       }
     }
     if (code === 'Escape') {
-      if (isBuyMenuOpen()) {
-        closeBuyMenu();
-      }
+      if (isBuyMenuOpen()) closeBuyMenu();
     }
   }
 
   requestPointerLock() {
     if (!isBuyMenuOpen()) {
+      audio.unlock();
       this.canvas.requestPointerLock();
     }
   }
 
-  onPointerLockChange(locked) {
-    // handled in main
-  }
-
-  updateFov(fov) {
-    this.camera.fov = fov;
-    this.camera.updateProjectionMatrix();
-  }
-
   _bindResize() {
     window.addEventListener('resize', () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
+      const aspect = window.innerWidth / window.innerHeight;
+      this.camera.aspect = aspect;
+      applyValorantFov(this.camera, aspect);
       this.renderer.setSize(window.innerWidth, window.innerHeight);
     });
   }

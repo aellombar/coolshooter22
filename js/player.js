@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { mouseDeltaToYaw, mouseDeltaToPitch, getSettings } from './settings.js';
+import { mouseDeltaToYaw, mouseDeltaToPitch } from './settings.js';
 import {
   createWeaponState, canFire, fireWeapon, getRecoilOffset,
   reloadWeapon, getReloadTime, getWeapon,
 } from './weapons.js';
-import { resolveCollision, checkLineOfSight } from './map.js';
+import { resolveCollision } from './map.js';
+import { ViewModel } from './viewModel.js';
+import { audio } from './audio.js';
 
 const GRAVITY = 20;
 const JUMP_FORCE = 7;
@@ -14,11 +16,11 @@ const PLAYER_HEIGHT = 1.6;
 const PLAYER_CROUCH_HEIGHT = 1.0;
 
 export class Player {
-  constructor(camera, colliders, onShoot, onKill) {
+  constructor(camera, scene, colliders, onShoot) {
     this.camera = camera;
+    this.scene = scene;
     this.colliders = colliders;
     this.onShoot = onShoot;
-    this.onKill = onKill;
 
     this.position = new THREE.Vector3();
     this.velocity = new THREE.Vector3();
@@ -32,8 +34,12 @@ export class Player {
     this.alive = true;
     this.credits = 800;
 
-    this.weapon = createWeaponState('classic');
-    this.secondaryWeapon = null;
+    // Valorant-style slots: primary (rifle/smg/sniper) + secondary (sidearm only)
+    this.primaryWeapon = null;
+    this.secondaryWeapon = createWeaponState('classic');
+    this.activeSlot = 'secondary';
+
+    this.viewModel = new ViewModel(camera, scene);
 
     this.keys = {};
     this.mouseDown = false;
@@ -48,6 +54,14 @@ export class Player {
     this._setupInput();
   }
 
+  /** Currently equipped weapon. */
+  get weapon() {
+    if (this.activeSlot === 'primary' && this.primaryWeapon) {
+      return this.primaryWeapon;
+    }
+    return this.secondaryWeapon;
+  }
+
   spawn(pos) {
     this.position.copy(pos);
     this.velocity.set(0, 0, 0);
@@ -57,9 +71,11 @@ export class Player {
     this.pitch = 0;
     this.recoilPitch = 0;
     this.recoilYaw = 0;
-    this.weapon = createWeaponState('classic');
-    this.secondaryWeapon = null;
+    this.primaryWeapon = null;
+    this.secondaryWeapon = createWeaponState('classic');
+    this.activeSlot = 'secondary';
     this.armor = 0;
+    this.viewModel.setWeapon('classic');
     this._updateCamera();
   }
 
@@ -89,20 +105,19 @@ export class Player {
     this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
   }
 
-  equipWeapon(weaponId) {
-    const def = getWeapon(weaponId);
-    if (def.category === 'sidearms' || weaponId === 'classic') {
-      this.secondaryWeapon = createWeaponState(weaponId);
-    } else {
-      this.weapon = createWeaponState(weaponId);
-    }
-  }
-
   buyWeapon(weaponId) {
     const def = getWeapon(weaponId);
     if (this.credits < def.price) return false;
     this.credits -= def.price;
-    this.equipWeapon(weaponId);
+
+    if (def.category === 'sidearms') {
+      // Sidearms always go to secondary slot — never duplicate in primary
+      this.secondaryWeapon = createWeaponState(weaponId);
+      this.equipSecondary();
+    } else {
+      this.primaryWeapon = createWeaponState(weaponId);
+      this.equipPrimary();
+    }
     return true;
   }
 
@@ -116,25 +131,34 @@ export class Player {
   }
 
   equipPrimary() {
-    if (this.weapon) this.weapon.shotsFired = 0;
+    if (!this.primaryWeapon) return;
+    this.activeSlot = 'primary';
+    this.primaryWeapon.shotsFired = 0;
+    this.viewModel.setWeapon(this.primaryWeapon.def.id);
   }
 
   equipSecondary() {
-    if (this.secondaryWeapon) {
-      const tmp = this.weapon;
-      this.weapon = this.secondaryWeapon;
-      this.secondaryWeapon = tmp;
-      this.weapon.shotsFired = 0;
-    }
+    this.activeSlot = 'secondary';
+    this.secondaryWeapon.shotsFired = 0;
+    this.viewModel.setWeapon(this.secondaryWeapon.def.id);
+  }
+
+  getLoadout() {
+    return {
+      primary: this.primaryWeapon?.def.id ?? null,
+      secondary: this.secondaryWeapon?.def.id ?? 'classic',
+      active: this.activeSlot,
+    };
   }
 
   startReload() {
-    if (this.weapon.isReloading || this.weapon.ammo === this.weapon.def.magSize) return;
-    if (this.weapon.reserve <= 0) return;
-    this.weapon.isReloading = true;
-    const reloadTime = getReloadTime(this.weapon.def.id);
+    const w = this.weapon;
+    if (w.isReloading || w.ammo === w.def.magSize) return;
+    if (w.reserve <= 0) return;
+    w.isReloading = true;
+    const reloadTime = getReloadTime(w.def.id);
     setTimeout(() => {
-      if (this.alive) reloadWeapon(this.weapon);
+      if (this.alive) reloadWeapon(w);
     }, reloadTime * 1000);
   }
 
@@ -156,13 +180,12 @@ export class Player {
   update(dt, plantSites) {
     if (!this.alive) return;
 
-    // Recoil recovery
-    const recovery = this.weapon.def.recoilRecovery * dt;
+    const w = this.weapon;
+    const recovery = w.def.recoilRecovery * dt;
     this.recoilPitch = THREE.MathUtils.lerp(this.recoilPitch, 0, recovery);
     this.recoilYaw = THREE.MathUtils.lerp(this.recoilYaw, 0, recovery);
 
-    // Movement
-    const speed = this.isCrouching ? CROUCH_SPEED : (this.weapon.def.runSpeed || WALK_SPEED);
+    const speed = this.isCrouching ? CROUCH_SPEED : (w.def.runSpeed || WALK_SPEED);
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
@@ -180,13 +203,11 @@ export class Player {
       this.position.add(moveDir);
     }
 
-    // Jump
     if (this.keys['Space'] && this.isGrounded) {
       this.velocity.y = JUMP_FORCE;
       this.isGrounded = false;
     }
 
-    // Gravity
     this.velocity.y -= GRAVITY * dt;
     this.position.y += this.velocity.y * dt;
     if (this.position.y <= PLAYER_HEIGHT) {
@@ -197,38 +218,33 @@ export class Player {
 
     this.position = resolveCollision(this.position, this.colliders);
     this._updateCamera();
+    this.viewModel.update(dt, this.isMoving);
 
-    // Shooting
     const now = performance.now() / 1000;
     const justPressed = this.mouseDown && !this._wasMouseDown;
     this._wasMouseDown = this.mouseDown;
 
-    const wantsFire = this.weapon.def.automatic
-      ? this.mouseDown
-      : justPressed;
+    const wantsFire = w.def.automatic ? this.mouseDown : justPressed;
 
-    if (wantsFire && canFire(this.weapon, now)) {
+    if (wantsFire && canFire(w, now)) {
       this._fire(now);
     }
 
-    // Reset spray when not firing
-    if (!this.mouseDown && !this.weapon.def.automatic) {
-      // keep shotsFired for pistols briefly
-    }
-    if (!this.mouseDown && this.weapon.def.automatic) {
-      if (now - this.weapon.lastShotTime > 0.3) {
-        this.weapon.shotsFired = 0;
-      }
+    if (!this.mouseDown && w.def.automatic) {
+      if (now - w.lastShotTime > 0.3) w.shotsFired = 0;
     }
 
-    // Planting
     this._updatePlanting(dt, plantSites);
   }
 
   _fire(now) {
-    fireWeapon(this.weapon, now);
+    const w = this.weapon;
+    fireWeapon(w, now);
+    audio.playGunshot(w.def.id);
+    this.viewModel.onFire();
+
     const airborne = !this.isGrounded;
-    const recoil = getRecoilOffset(this.weapon, this.isMoving, airborne);
+    const recoil = getRecoilOffset(w, this.isMoving, airborne);
 
     this.recoilPitch += recoil.viewKickPitch;
     this.recoilYaw += recoil.viewKickYaw;
@@ -243,7 +259,7 @@ export class Player {
     );
 
     const origin = this.camera.position.clone();
-    this.onShoot(origin, dir, this.weapon.def);
+    this.onShoot(origin, dir, w.def);
   }
 
   _updatePlanting(dt, plantSites) {
@@ -285,16 +301,6 @@ export class Player {
     this.camera.rotation.order = 'YXZ';
     this.camera.rotation.y = totalYaw;
     this.camera.rotation.x = totalPitch;
-  }
-
-  getForwardDirection() {
-    const totalPitch = this.pitch + this.recoilPitch;
-    const totalYaw = this.yaw + this.recoilYaw;
-    return new THREE.Vector3(
-      -Math.sin(totalYaw) * Math.cos(totalPitch),
-      Math.sin(totalPitch),
-      -Math.cos(totalYaw) * Math.cos(totalPitch)
-    );
   }
 }
 
