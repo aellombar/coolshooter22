@@ -37,11 +37,13 @@ export class Bot {
     this.mesh.position.copy(this.position);
     this.mesh.position.y = 0.9;
     this.mesh.castShadow = true;
+    this.mesh.userData.bot = this;
 
     const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
     const headMat = new THREE.MeshStandardMaterial({ color: 0xcc3344 });
     this.headMesh = new THREE.Mesh(headGeo, headMat);
     this.headMesh.position.y = 1.15;
+    this.headMesh.userData.bot = this;
     this.mesh.add(this.headMesh);
 
     scene.add(this.mesh);
@@ -76,10 +78,20 @@ export class Bot {
       dmg -= absorbed * 0.66;
     }
     this.health -= dmg;
+    this._flashHit();
     if (this.health <= 0) {
       this.health = 0;
       this.alive = false;
       this.mesh.visible = false;
+    }
+  }
+
+  _flashHit() {
+    const mats = [this.mesh.material, this.headMesh.material];
+    for (const m of mats) {
+      const prev = m.color.getHex();
+      m.color.setHex(0xffffff);
+      setTimeout(() => m.color.setHex(prev), 80);
     }
   }
 

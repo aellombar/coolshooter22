@@ -15,10 +15,8 @@ const WEAPON_SHAPES = {
 };
 
 const DEFAULT_SHAPE = { barrel: 0.05, length: 0.5, height: 0.14, color: 0x777777, type: 'rifle' };
+const SNIPER_SCOPED = new Set(['operator', 'marshal']);
 
-/**
- * First-person view model on camera — always layer 0, lit locally.
- */
 export class ViewModel {
   constructor(camera) {
     this.camera = camera;
@@ -28,15 +26,14 @@ export class ViewModel {
 
     this.hipPos = new THREE.Vector3(0.28, -0.24, -0.42);
     this.hipRot = new THREE.Euler(-0.06, 0.1, 0.03);
-    this.adsPos = new THREE.Vector3(0, -0.12, -0.38);
-    this.adsRot = new THREE.Euler(-0.02, 0, 0);
+    this.adsPos = new THREE.Vector3(0.15, -0.22, -0.45);
+    this.adsRot = new THREE.Euler(-0.04, 0.05, 0.02);
 
     this.recoilOffset = 0;
     this.bobTime = 0;
     this.adsBlend = 0;
     this.currentWeaponId = null;
 
-    // Local light so weapon is always visible
     const light = new THREE.PointLight(0xffffff, 1.2, 3);
     light.position.set(0.1, 0.1, -0.2);
     this.group.add(light);
@@ -71,8 +68,6 @@ export class ViewModel {
     });
 
     const weaponRoot = new THREE.Group();
-
-    // Grip + hand guard
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.1), darkMat);
     grip.position.set(0, -0.05, 0.04);
     weaponRoot.add(grip);
@@ -81,13 +76,11 @@ export class ViewModel {
     guard.position.set(0, 0.02, -0.04);
     weaponRoot.add(guard);
 
-    // Receiver body
     const bodyW = shape.type === 'pistol' ? shape.barrel * 2.5 : shape.barrel * 3.5;
     const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, shape.height, 0.09), mat);
     body.position.set(0, 0.04, -shape.length * 0.22);
     weaponRoot.add(body);
 
-    // Barrel
     const barrel = new THREE.Mesh(
       new THREE.BoxGeometry(shape.barrel, shape.barrel * 0.9, shape.length * 0.65),
       mat
@@ -95,35 +88,29 @@ export class ViewModel {
     barrel.position.set(0, 0.06, -shape.length * 0.58);
     weaponRoot.add(barrel);
 
-    // Muzzle tip marker
     this.barrelTip.position.set(0, 0.06, -shape.length * 0.92);
     weaponRoot.add(this.barrelTip);
 
-    // Magazine (non-pistols)
     if (shape.type !== 'pistol') {
       const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.07), darkMat);
       mag.position.set(0, -0.1, -shape.length * 0.15);
       weaponRoot.add(mag);
     }
 
-    // Stock
     if (shape.type === 'rifle' || shape.type === 'sniper') {
       const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.22), darkMat);
       stock.position.set(0, 0.02, 0.16);
       weaponRoot.add(stock);
     }
 
-    // Scope mesh for scoped weapons
+    // Scope mesh only visible when NOT scoped (hip fire visual)
     if (shape.type === 'sniper' || weaponId === 'guardian') {
       const scopeBody = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.22), darkMat);
       scopeBody.position.set(0, 0.16, -shape.length * 0.38);
+      scopeBody.name = 'scopeMesh';
       weaponRoot.add(scopeBody);
-      const scopeLens = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.04), accentMat);
-      scopeLens.position.set(0, 0.16, -shape.length * 0.5);
-      weaponRoot.add(scopeLens);
     }
 
-    // SMG / rifle front grip
     if (shape.type === 'rifle' || shape.type === 'smg') {
       const fGrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), darkMat);
       fGrip.position.set(0, -0.08, -shape.length * 0.45);
@@ -134,7 +121,6 @@ export class ViewModel {
     weaponRoot.traverse(o => { if (o.isMesh) o.renderOrder = 999; });
     this.weaponRoot = weaponRoot;
     this.currentWeaponId = weaponId;
-    this.currentShape = shape;
   }
 
   setWeapon(weaponId) {
@@ -145,15 +131,21 @@ export class ViewModel {
     this.recoilOffset = 0.08;
   }
 
-  /** World-space muzzle position for tracers. */
   getMuzzleWorldPosition(target = new THREE.Vector3()) {
+    this.camera.updateMatrixWorld(true);
     this.barrelTip.updateWorldMatrix(true, false);
     return target.setFromMatrixPosition(this.barrelTip.matrixWorld);
   }
 
-  update(dt, isMoving, isScoped) {
+  update(dt, isMoving, isScoped, weaponId) {
     this.recoilOffset = THREE.MathUtils.lerp(this.recoilOffset, 0, dt * 14);
     this.adsBlend = THREE.MathUtils.lerp(this.adsBlend, isScoped ? 1 : 0, dt * 12);
+
+    // Hide weapon entirely when scoped on sniper rifles (Valorant behavior)
+    const hideWhenScoped = isScoped && SNIPER_SCOPED.has(weaponId);
+    this.group.visible = !hideWhenScoped;
+
+    if (hideWhenScoped) return;
 
     if (isMoving && !isScoped) this.bobTime += dt * 9;
     else this.bobTime *= 0.85;
@@ -161,7 +153,6 @@ export class ViewModel {
     const bobY = isMoving && !isScoped ? Math.sin(this.bobTime) * 0.015 : 0;
     const bobX = isMoving && !isScoped ? Math.cos(this.bobTime * 0.5) * 0.008 : 0;
 
-    // Interpolate hip ↔ ADS
     this.group.position.lerpVectors(this.hipPos, this.adsPos, this.adsBlend);
     this.group.position.y += bobY;
     this.group.position.x += bobX * (1 - this.adsBlend);

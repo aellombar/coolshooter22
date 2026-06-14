@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mouseDeltaToYaw, mouseDeltaToPitch, getScopedSensMultiplier } from './settings.js';
 import {
   createWeaponState, canFire, fireWeapon, getViewKick, getBulletSpread,
+  getCurrentInaccuracy,
   reloadWeapon, getReloadTime, getWeapon,
 } from './weapons.js';
 import { resolveCollision } from './map.js';
@@ -301,7 +302,8 @@ export class Player {
 
     this.position = resolveCollision(this.position, this.colliders);
     this._updateCamera();
-    this.viewModel.update(dt, this.isMoving, this.isScoped);
+    this.viewModel.update(dt, this.isMoving, this.isScoped, this.weapon.def.id);
+    this._updateCrosshairBloom();
 
     const now = performance.now() / 1000;
     const justPressed = this.mouseDown && !this._wasMouseDown;
@@ -326,27 +328,38 @@ export class Player {
     audio.playGunshot(w.def.id);
     this.viewModel.onFire();
 
+    this.camera.updateMatrixWorld(true);
+
     const airborne = !this.isGrounded;
     const scoped = this.isScoped && w.def.scope;
 
-    // Valorant: aim from crosshair, then apply bullet spread
     const aimDir = this.getCrosshairDirection();
-    const spread = getBulletSpread(w, this.isMoving, airborne, scoped);
+    const spread = getBulletSpread(w, this.isMoving, airborne, scoped, this.isCrouching);
     const bulletDir = this._applySpread(aimDir, spread);
 
-    // Hitscan from camera (crosshair origin)
-    const hitOrigin = new THREE.Vector3();
-    this.camera.getWorldPosition(hitOrigin);
-
-    // Visual tracer from weapon muzzle
+    // Hitscan from eye position (crosshair aligned)
+    const hitOrigin = this.position.clone();
     const muzzle = this.viewModel.getMuzzleWorldPosition();
 
     this.onShoot({ hitOrigin, muzzle, direction: bulletDir, weaponDef: w.def });
 
-    // View kick after shot (moves crosshair for next shot)
     const kick = getViewKick(w);
     this.recoilPitch += kick.pitch;
     this.recoilYaw += kick.yaw;
+  }
+
+  _updateCrosshairBloom() {
+    const w = this.weapon;
+    if (!w) return;
+    const scoped = this.isScoped && w.def.scope;
+    const spread = getCurrentInaccuracy(w, this.isMoving, !this.isGrounded, scoped, this.isCrouching);
+    const ch = document.getElementById('crosshair');
+    if (!ch || ch.classList.contains('hidden')) return;
+    // Valorant-style crosshair expansion (pixels per degree of inaccuracy)
+    const gap = 4 + spread * 2.2;
+    const length = 6 + spread * 0.4;
+    ch.style.setProperty('--ch-gap', `${gap}px`);
+    ch.style.setProperty('--ch-len', `${length}px`);
   }
 
   _updatePlanting(dt, plantSites) {
@@ -391,24 +404,42 @@ export class Player {
   }
 }
 
-export function raycastHit(origin, direction, targets, maxDist = 100) {
-  const raycaster = new THREE.Raycaster(origin, direction, 0, maxDist);
-  const meshes = targets.filter(t => t.alive && t.mesh).map(t => t.mesh);
-  const hits = raycaster.intersectObjects(meshes, true);
+export function raycastHit(origin, direction, targets, maxDist = 150, blockers = []) {
+  const dir = direction.clone().normalize();
+  const raycaster = new THREE.Raycaster(origin, dir, 0.05, maxDist);
+  raycaster.camera = null;
+
+  for (const t of targets) {
+    if (t.alive && t.mesh) t.mesh.updateMatrixWorld(true);
+  }
+  for (const mesh of blockers) {
+    mesh.updateMatrixWorld?.(true);
+  }
+
+  const botMeshes = targets.filter(t => t.alive && t.mesh).map(t => t.mesh);
+  const allMeshes = blockers.length ? [...blockers, ...botMeshes] : botMeshes;
+  if (allMeshes.length === 0) return null;
+
+  const hits = raycaster.intersectObjects(allMeshes, true);
   if (hits.length === 0) return null;
 
-  const hit = hits[0];
-  let obj = hit.object;
-  while (obj && !targets.find(t => t.mesh === obj)) {
-    obj = obj.parent;
+  for (const hit of hits) {
+    let obj = hit.object;
+    while (obj) {
+      const bot = obj.userData?.bot;
+      if (bot?.alive) {
+        const bodyY = bot.mesh.position.y;
+        const headY = bodyY + 1.55;
+        const legY = bodyY + 0.35;
+        let hitZone = 'body';
+        if (hit.point.y >= headY) hitZone = 'head';
+        else if (hit.point.y <= legY) hitZone = 'leg';
+        return { target: bot, hit, hitZone, distance: hit.distance };
+      }
+      obj = obj.parent;
+    }
   }
-  const target = targets.find(t => t.mesh === obj);
-  if (!target) return null;
-
-  const headHeight = target.mesh.position.y + 1.4;
-  const hitZone = hit.point.y > headHeight ? 'head' : (hit.point.y < target.mesh.position.y + 0.8 ? 'leg' : 'body');
-
-  return { target, hit, hitZone, distance: hit.distance };
+  return null;
 }
 
 export function createBulletTracer(scene, origin, direction, maxDist = 100, hitPoint = null) {

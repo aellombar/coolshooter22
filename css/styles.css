@@ -251,14 +251,17 @@ input[type="range"] {
   color: var(--valorant-gold);
 }
 
-/* Crosshair */
+/* Crosshair — gap/length driven by movement bloom (--ch-gap, --ch-len) */
 .crosshair {
+  --ch-gap: 4px;
+  --ch-len: 6px;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 20px;
-  height: 20px;
+  width: 40px;
+  height: 40px;
+  transition: --ch-gap 0.05s linear, --ch-len 0.05s linear;
 }
 
 .ch-line {
@@ -268,23 +271,23 @@ input[type="range"] {
 
 .ch-line.top, .ch-line.bottom {
   width: 2px;
-  height: 6px;
+  height: var(--ch-len);
   left: 50%;
   transform: translateX(-50%);
 }
 
-.ch-line.top { top: 0; }
-.ch-line.bottom { bottom: 0; }
+.ch-line.top { bottom: calc(50% + var(--ch-gap)); }
+.ch-line.bottom { top: calc(50% + var(--ch-gap)); }
 
 .ch-line.left, .ch-line.right {
   height: 2px;
-  width: 6px;
+  width: var(--ch-len);
   top: 50%;
   transform: translateY(-50%);
 }
 
-.ch-line.left { left: 0; }
-.ch-line.right { right: 0; }
+.ch-line.left { right: calc(50% + var(--ch-gap)); }
+.ch-line.right { left: calc(50% + var(--ch-gap)); }
 
 .ch-dot {
   position: absolute;

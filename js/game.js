@@ -51,6 +51,7 @@ export class Game {
 
     const mapData = buildMap(this.scene);
     this.colliders = mapData.colliders;
+    this.mapObjects = mapData.mapObjects;
     this.plantSites = mapData.plantSites;
     this.spawnPoint = mapData.spawnPoint;
     this.defenderSpawns = mapData.defenderSpawns;
@@ -150,9 +151,10 @@ export class Game {
   }
 
   _handlePlayerShot({ hitOrigin, muzzle, direction, weaponDef }) {
-    const hit = raycastHit(hitOrigin, direction, this.bots);
+    const maxDist = (weaponDef.range ?? 50) * 3;
+    const hit = raycastHit(hitOrigin, direction, this.bots, maxDist, this.mapObjects ?? []);
     const hitPoint = hit ? hit.hit.point : null;
-    createBulletTracer(this.scene, muzzle, direction, 100, hitPoint);
+    createBulletTracer(this.scene, muzzle, direction, maxDist, hitPoint);
 
     if (hit) {
       const dmg = weaponDef.damage[hit.hitZone] || weaponDef.damage.body;
