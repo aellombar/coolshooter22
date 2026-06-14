@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mouseDeltaToYaw, mouseDeltaToPitch } from './settings.js';
 import {
-  createWeaponState, canFire, fireWeapon, getRecoilOffset,
+  createWeaponState, canFire, fireWeapon, getViewKick, getBulletSpread,
   reloadWeapon, getReloadTime, getWeapon,
 } from './weapons.js';
 import { resolveCollision } from './map.js';
@@ -34,15 +34,16 @@ export class Player {
     this.alive = true;
     this.credits = 800;
 
-    // Valorant-style slots: primary (rifle/smg/sniper) + secondary (sidearm only)
     this.primaryWeapon = null;
     this.secondaryWeapon = createWeaponState('classic');
     this.activeSlot = 'secondary';
 
-    this.viewModel = new ViewModel(camera, scene);
+    this.viewModel = new ViewModel(camera);
 
     this.keys = {};
     this.mouseDown = false;
+    this.rightMouseDown = false;
+    this.isScoped = false;
     this.isMoving = false;
     this.isGrounded = true;
     this.isCrouching = false;
@@ -54,12 +55,15 @@ export class Player {
     this._setupInput();
   }
 
-  /** Currently equipped weapon. */
   get weapon() {
     if (this.activeSlot === 'primary' && this.primaryWeapon) {
       return this.primaryWeapon;
     }
     return this.secondaryWeapon;
+  }
+
+  canScope() {
+    return !!this.weapon.def.scope;
   }
 
   spawn(pos) {
@@ -75,7 +79,9 @@ export class Player {
     this.secondaryWeapon = createWeaponState('classic');
     this.activeSlot = 'secondary';
     this.armor = 0;
+    this.isScoped = false;
     this.viewModel.setWeapon('classic');
+    this._updateScopeUI();
     this._updateCamera();
   }
 
@@ -89,18 +95,77 @@ export class Player {
     document.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
     document.addEventListener('mousedown', (e) => {
       if (e.button === 0) this.mouseDown = true;
+      if (e.button === 2) {
+        this.rightMouseDown = true;
+        this._updateScope(true);
+      }
     });
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) {
         this.mouseDown = false;
         this.weapon.shotsFired = 0;
       }
+      if (e.button === 2) {
+        this.rightMouseDown = false;
+        this._updateScope(false);
+      }
     });
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  _updateScope(wantsScope) {
+    if (wantsScope && this.canScope()) {
+      this.isScoped = true;
+    } else {
+      this.isScoped = false;
+    }
+    this._updateScopeUI();
+    if (this.onScopeChange) this.onScopeChange(this.isScoped, this.weapon.def);
+  }
+
+  _updateScopeUI() {
+    const scopeEl = document.getElementById('scope-overlay');
+    const crosshair = document.getElementById('crosshair');
+    const def = this.weapon.def;
+    const showScope = this.isScoped && def.scope;
+
+    if (scopeEl) {
+      scopeEl.classList.toggle('hidden', !showScope);
+      scopeEl.classList.toggle('sniper', def.id === 'operator' || def.id === 'marshal');
+      scopeEl.classList.toggle('ads', def.id === 'guardian');
+    }
+    if (crosshair) {
+      crosshair.classList.toggle('hidden', showScope);
+    }
+  }
+
+  /** Crosshair aim direction — bullets go where the crosshair points (Valorant). */
+  getCrosshairDirection() {
+    const totalPitch = this.pitch + this.recoilPitch;
+    const totalYaw = this.yaw + this.recoilYaw;
+    return new THREE.Vector3(
+      -Math.sin(totalYaw) * Math.cos(totalPitch),
+      Math.sin(totalPitch),
+      -Math.cos(totalYaw) * Math.cos(totalPitch)
+    ).normalize();
+  }
+
+  /** Apply spread as small angular offset from crosshair aim. */
+  _applySpread(baseDir, spread) {
+    const right = new THREE.Vector3().crossVectors(baseDir, new THREE.Vector3(0, 1, 0));
+    if (right.lengthSq() < 0.001) right.set(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(right, baseDir).normalize();
+    const dir = baseDir.clone();
+    dir.addScaledVector(right, Math.tan(spread.yaw));
+    dir.addScaledVector(up, Math.tan(spread.pitch));
+    return dir.normalize();
   }
 
   onMouseMove(deltaX, deltaY) {
-    this.yaw -= mouseDeltaToYaw(deltaX);
-    this.pitch -= mouseDeltaToPitch(deltaY);
+    const sensMul = this.isScoped ? 0.45 : 1;
+    this.yaw -= mouseDeltaToYaw(deltaX) * sensMul;
+    this.pitch -= mouseDeltaToPitch(deltaY) * sensMul;
     const maxPitch = 89 * (Math.PI / 180);
     this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
   }
@@ -111,7 +176,6 @@ export class Player {
     this.credits -= def.price;
 
     if (def.category === 'sidearms') {
-      // Sidearms always go to secondary slot — never duplicate in primary
       this.secondaryWeapon = createWeaponState(weaponId);
       this.equipSecondary();
     } else {
@@ -134,13 +198,19 @@ export class Player {
     if (!this.primaryWeapon) return;
     this.activeSlot = 'primary';
     this.primaryWeapon.shotsFired = 0;
+    this.isScoped = false;
     this.viewModel.setWeapon(this.primaryWeapon.def.id);
+    this._updateScopeUI();
+    if (this.onScopeChange) this.onScopeChange(false, this.weapon.def);
   }
 
   equipSecondary() {
     this.activeSlot = 'secondary';
     this.secondaryWeapon.shotsFired = 0;
+    this.isScoped = false;
     this.viewModel.setWeapon(this.secondaryWeapon.def.id);
+    this._updateScopeUI();
+    if (this.onScopeChange) this.onScopeChange(false, this.weapon.def);
   }
 
   getLoadout() {
@@ -174,6 +244,8 @@ export class Player {
     if (this.health <= 0) {
       this.health = 0;
       this.alive = false;
+      this.isScoped = false;
+      this._updateScopeUI();
     }
   }
 
@@ -181,11 +253,21 @@ export class Player {
     if (!this.alive) return;
 
     const w = this.weapon;
+
+    // Hold scope while RMB held
+    if (this.rightMouseDown && this.canScope()) {
+      if (!this.isScoped) this._updateScope(true);
+    } else if (this.isScoped) {
+      this._updateScope(false);
+    }
+
     const recovery = w.def.recoilRecovery * dt;
     this.recoilPitch = THREE.MathUtils.lerp(this.recoilPitch, 0, recovery);
     this.recoilYaw = THREE.MathUtils.lerp(this.recoilYaw, 0, recovery);
 
-    const speed = this.isCrouching ? CROUCH_SPEED : (w.def.runSpeed || WALK_SPEED);
+    let speed = this.isCrouching ? CROUCH_SPEED : (w.def.runSpeed || WALK_SPEED);
+    if (this.isScoped) speed *= 0.45;
+
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
@@ -203,7 +285,7 @@ export class Player {
       this.position.add(moveDir);
     }
 
-    if (this.keys['Space'] && this.isGrounded) {
+    if (this.keys['Space'] && this.isGrounded && !this.isScoped) {
       this.velocity.y = JUMP_FORCE;
       this.isGrounded = false;
     }
@@ -218,7 +300,7 @@ export class Player {
 
     this.position = resolveCollision(this.position, this.colliders);
     this._updateCamera();
-    this.viewModel.update(dt, this.isMoving);
+    this.viewModel.update(dt, this.isMoving, this.isScoped);
 
     const now = performance.now() / 1000;
     const justPressed = this.mouseDown && !this._wasMouseDown;
@@ -244,22 +326,26 @@ export class Player {
     this.viewModel.onFire();
 
     const airborne = !this.isGrounded;
-    const recoil = getRecoilOffset(w, this.isMoving, airborne);
+    const scoped = this.isScoped && w.def.scope;
 
-    this.recoilPitch += recoil.viewKickPitch;
-    this.recoilYaw += recoil.viewKickYaw;
+    // Valorant: aim from crosshair, then apply bullet spread
+    const aimDir = this.getCrosshairDirection();
+    const spread = getBulletSpread(w, this.isMoving, airborne, scoped);
+    const bulletDir = this._applySpread(aimDir, spread);
 
-    const totalPitch = this.pitch + this.recoilPitch + recoil.pitch;
-    const totalYaw = this.yaw + this.recoilYaw + recoil.yaw;
+    // Hitscan from camera (crosshair origin)
+    const hitOrigin = new THREE.Vector3();
+    this.camera.getWorldPosition(hitOrigin);
 
-    const dir = new THREE.Vector3(
-      -Math.sin(totalYaw) * Math.cos(totalPitch),
-      Math.sin(totalPitch),
-      -Math.cos(totalYaw) * Math.cos(totalPitch)
-    );
+    // Visual tracer from weapon muzzle
+    const muzzle = this.viewModel.getMuzzleWorldPosition();
 
-    const origin = this.camera.position.clone();
-    this.onShoot(origin, dir, w.def);
+    this.onShoot({ hitOrigin, muzzle, direction: bulletDir, weaponDef: w.def });
+
+    // View kick after shot (moves crosshair for next shot)
+    const kick = getViewKick(w);
+    this.recoilPitch += kick.pitch;
+    this.recoilYaw += kick.yaw;
   }
 
   _updatePlanting(dt, plantSites) {
@@ -324,16 +410,26 @@ export function raycastHit(origin, direction, targets, maxDist = 100) {
   return { target, hit, hitZone, distance: hit.distance };
 }
 
-export function createBulletTracer(scene, origin, end) {
+export function createBulletTracer(scene, origin, direction, maxDist = 100, hitPoint = null) {
+  const end = hitPoint
+    ? hitPoint.clone()
+    : origin.clone().add(direction.clone().multiplyScalar(maxDist));
   const geo = new THREE.BufferGeometry().setFromPoints([origin, end]);
-  const mat = new THREE.LineBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.6 });
+  const mat = new THREE.LineBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.7 });
   const line = new THREE.Line(geo, mat);
   scene.add(line);
-  setTimeout(() => { scene.remove(line); geo.dispose(); mat.dispose(); }, 50);
+  setTimeout(() => { scene.remove(line); geo.dispose(); mat.dispose(); }, 60);
 }
 
 export function createHitMarker() {
   const ch = document.getElementById('crosshair');
-  ch.style.transform = 'translate(-50%, -50%) scale(1.3)';
-  setTimeout(() => { ch.style.transform = 'translate(-50%, -50%) scale(1)'; }, 80);
+  const scopeHit = document.getElementById('scope-hit');
+  if (ch && !ch.classList.contains('hidden')) {
+    ch.style.transform = 'translate(-50%, -50%) scale(1.3)';
+    setTimeout(() => { ch.style.transform = 'translate(-50%, -50%) scale(1)'; }, 80);
+  }
+  if (scopeHit) {
+    scopeHit.classList.add('flash');
+    setTimeout(() => scopeHit.classList.remove('flash'), 80);
+  }
 }

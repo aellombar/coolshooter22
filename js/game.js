@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildMap } from './map.js';
 import { Player, raycastHit, createBulletTracer, createHitMarker } from './player.js';
 import { createBotTeam, addKillFeed } from './bots.js';
-import { applyValorantFov } from './settings.js';
+import { applyValorantFov, horizontalToVerticalFov, VALORANT_H_FOV } from './settings.js';
 import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
 import { audio } from './audio.js';
 
@@ -29,8 +29,10 @@ export class Game {
     this.scene.background = new THREE.Color(0x8aa8c8);
     this.scene.fog = new THREE.Fog(0xa8c0d8, 45, 95);
 
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
     applyValorantFov(this.camera);
+    this._targetVFov = this.camera.fov;
+    this._scopeFovBlend = 0;
 
     this.clock = new THREE.Clock();
     this._bindResize();
@@ -49,9 +51,10 @@ export class Game {
       this.camera,
       this.scene,
       this.colliders,
-      (origin, dir, weaponDef) => this._handlePlayerShot(origin, dir, weaponDef),
+      (shot) => this._handlePlayerShot(shot),
     );
     this.player.onPlant = (site) => this._handlePlant(site);
+    this.player.onScopeChange = (scoped, weaponDef) => this._onScopeChange(scoped, weaponDef);
     this.player.spawn(this.spawnPoint);
     this.player.credits = 800;
 
@@ -109,14 +112,29 @@ export class Game {
     }
 
     this._updateHUD();
+    this._updateScopedFov(dt);
     this.renderer.render(this.scene, this.camera);
   }
 
-  _handlePlayerShot(origin, direction, weaponDef) {
-    const end = origin.clone().add(direction.clone().multiplyScalar(100));
-    createBulletTracer(this.scene, origin, end);
+  _onScopeChange(scoped, weaponDef) {
+    if (scoped && weaponDef.scopeHFov) {
+      this._targetVFov = horizontalToVerticalFov(weaponDef.scopeHFov, this.camera.aspect);
+    } else {
+      this._targetVFov = horizontalToVerticalFov(VALORANT_H_FOV, this.camera.aspect);
+    }
+  }
 
-    const hit = raycastHit(origin, direction, this.bots);
+  _updateScopedFov(dt) {
+    const target = this._targetVFov ?? this.camera.fov;
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, target, dt * 14);
+    this.camera.updateProjectionMatrix();
+  }
+
+  _handlePlayerShot({ hitOrigin, muzzle, direction, weaponDef }) {
+    const hit = raycastHit(hitOrigin, direction, this.bots);
+    const hitPoint = hit ? hit.hit.point : null;
+    createBulletTracer(this.scene, muzzle, direction, 100, hitPoint);
+
     if (hit) {
       const dmg = weaponDef.damage[hit.hitZone] || weaponDef.damage.body;
       hit.target.takeDamage(dmg, hit.hitZone);

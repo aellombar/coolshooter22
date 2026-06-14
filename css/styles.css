@@ -289,6 +289,85 @@ input[type="range"] {
   transform: translate(-50%, -50%);
 }
 
+/* Scope overlay (Operator / Marshal / Guardian) */
+#scope-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+#scope-overlay.hidden {
+  display: none !important;
+}
+
+.scope-ring {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 18%, rgba(0, 0, 0, 0.92) 19%);
+}
+
+#scope-overlay.sniper .scope-ring {
+  background: radial-gradient(circle at center, transparent 22%, rgba(0, 0, 0, 0.95) 23%);
+}
+
+#scope-overlay.ads .scope-ring {
+  background: radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, 0.75) 36%);
+}
+
+.scope-cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+}
+
+.sc-line {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.sc-line.sc-top, .sc-line.sc-bottom {
+  width: 1px;
+  height: 50%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.sc-line.sc-top { top: 0; }
+.sc-line.sc-bottom { bottom: 0; }
+
+.sc-line.sc-left, .sc-line.sc-right {
+  height: 1px;
+  width: 50%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.sc-line.sc-left { left: 0; }
+.sc-line.sc-right { right: 0; }
+
+#scope-overlay.sniper .sc-line {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.scope-hit-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border: 1px solid transparent;
+  border-radius: 50%;
+}
+
+.scope-hit-marker.flash {
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
 .hud-bottom {
   position: absolute;
   bottom: 1.5rem;

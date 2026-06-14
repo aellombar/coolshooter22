@@ -1,83 +1,140 @@
 import * as THREE from 'three';
 
 const WEAPON_SHAPES = {
-  classic: { barrel: 0.04, length: 0.22, height: 0.1, color: 0x888888 },
-  ghost: { barrel: 0.035, length: 0.24, height: 0.09, color: 0x666688 },
-  sheriff: { barrel: 0.05, length: 0.3, height: 0.12, color: 0x886644 },
-  stinger: { barrel: 0.035, length: 0.38, height: 0.1, color: 0x668866 },
-  spectre: { barrel: 0.04, length: 0.42, height: 0.11, color: 0x556677 },
-  bulldog: { barrel: 0.045, length: 0.48, height: 0.12, color: 0x776655 },
-  guardian: { barrel: 0.05, length: 0.55, height: 0.13, color: 0x887766 },
-  vandal: { barrel: 0.045, length: 0.58, height: 0.12, color: 0x884444 },
-  phantom: { barrel: 0.045, length: 0.56, height: 0.12, color: 0x446688 },
-  marshal: { barrel: 0.04, length: 0.72, height: 0.1, color: 0x667755 },
-  operator: { barrel: 0.055, length: 0.85, height: 0.13, color: 0x555555 },
+  classic: { barrel: 0.05, length: 0.28, height: 0.12, color: 0x999999, type: 'pistol' },
+  ghost: { barrel: 0.045, length: 0.3, height: 0.11, color: 0x7788aa, type: 'pistol' },
+  sheriff: { barrel: 0.06, length: 0.38, height: 0.14, color: 0xaa7744, type: 'pistol' },
+  stinger: { barrel: 0.045, length: 0.48, height: 0.13, color: 0x669966, type: 'smg' },
+  spectre: { barrel: 0.05, length: 0.52, height: 0.14, color: 0x556688, type: 'smg' },
+  bulldog: { barrel: 0.055, length: 0.58, height: 0.15, color: 0x887766, type: 'rifle' },
+  guardian: { barrel: 0.06, length: 0.68, height: 0.16, color: 0x998866, type: 'rifle' },
+  vandal: { barrel: 0.055, length: 0.72, height: 0.15, color: 0xaa4444, type: 'rifle' },
+  phantom: { barrel: 0.055, length: 0.7, height: 0.15, color: 0x446688, type: 'rifle' },
+  marshal: { barrel: 0.05, length: 0.88, height: 0.13, color: 0x668855, type: 'sniper' },
+  operator: { barrel: 0.065, length: 1.05, height: 0.17, color: 0x444444, type: 'sniper' },
 };
 
-const DEFAULT_SHAPE = { barrel: 0.04, length: 0.4, height: 0.11, color: 0x777777 };
+const DEFAULT_SHAPE = { barrel: 0.05, length: 0.5, height: 0.14, color: 0x777777, type: 'rifle' };
 
 /**
- * First-person view model attached to camera (Valorant-style lower-right hold).
+ * First-person view model on camera — always layer 0, lit locally.
  */
 export class ViewModel {
-  constructor(camera, scene) {
+  constructor(camera) {
     this.camera = camera;
     this.group = new THREE.Group();
-    this.group.layers.set(1);
+    this.barrelTip = new THREE.Object3D();
     camera.add(this.group);
 
-    this.basePos = new THREE.Vector3(0.22, -0.18, -0.35);
-    this.baseRot = new THREE.Euler(-0.05, 0.08, 0.02);
+    this.hipPos = new THREE.Vector3(0.28, -0.24, -0.42);
+    this.hipRot = new THREE.Euler(-0.06, 0.1, 0.03);
+    this.adsPos = new THREE.Vector3(0, -0.12, -0.38);
+    this.adsRot = new THREE.Euler(-0.02, 0, 0);
+
     this.recoilOffset = 0;
     this.bobTime = 0;
+    this.adsBlend = 0;
+    this.currentWeaponId = null;
+
+    // Local light so weapon is always visible
+    const light = new THREE.PointLight(0xffffff, 1.2, 3);
+    light.position.set(0.1, 0.1, -0.2);
+    this.group.add(light);
 
     this._buildModel('classic');
   }
 
   _buildModel(weaponId) {
-    while (this.group.children.length) {
-      const c = this.group.children[0];
-      this.group.remove(c);
-      c.traverse?.((o) => {
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) o.material.dispose?.();
-      });
+    const light = this.group.children.find(o => o.isPointLight);
+    for (const c of [...this.group.children]) {
+      if (c !== light) {
+        this.group.remove(c);
+        c.traverse?.((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) o.material.dispose?.();
+        });
+      }
     }
 
     const shape = WEAPON_SHAPES[weaponId] || DEFAULT_SHAPE;
-    const mat = new THREE.MeshStandardMaterial({ color: shape.color, roughness: 0.4, metalness: 0.6 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.4 });
+    const mat = new THREE.MeshStandardMaterial({
+      color: shape.color, roughness: 0.35, metalness: 0.65,
+      depthTest: false, depthWrite: false,
+    });
+    const darkMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a, roughness: 0.5, metalness: 0.5,
+      depthTest: false, depthWrite: false,
+    });
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: 0x333333, roughness: 0.3, metalness: 0.7,
+      depthTest: false, depthWrite: false,
+    });
 
-    // Hand / grip area
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.08), darkMat);
-    grip.position.set(0, -0.04, 0.02);
-    this.group.add(grip);
+    const weaponRoot = new THREE.Group();
 
-    // Body
-    const body = new THREE.Mesh(new THREE.BoxGeometry(shape.barrel * 3, shape.height, 0.07), mat);
-    body.position.set(0, 0.02, -shape.length * 0.25);
-    this.group.add(body);
+    // Grip + hand guard
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.1), darkMat);
+    grip.position.set(0, -0.05, 0.04);
+    weaponRoot.add(grip);
+
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.12), accentMat);
+    guard.position.set(0, 0.02, -0.04);
+    weaponRoot.add(guard);
+
+    // Receiver body
+    const bodyW = shape.type === 'pistol' ? shape.barrel * 2.5 : shape.barrel * 3.5;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, shape.height, 0.09), mat);
+    body.position.set(0, 0.04, -shape.length * 0.22);
+    weaponRoot.add(body);
 
     // Barrel
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(shape.barrel, shape.barrel, shape.length), mat);
-    barrel.position.set(0, 0.04, -shape.length * 0.55);
-    this.group.add(barrel);
+    const barrel = new THREE.Mesh(
+      new THREE.BoxGeometry(shape.barrel, shape.barrel * 0.9, shape.length * 0.65),
+      mat
+    );
+    barrel.position.set(0, 0.06, -shape.length * 0.58);
+    weaponRoot.add(barrel);
 
-    // Stock for rifles/snipers
-    if (shape.length > 0.45) {
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.18), darkMat);
-      stock.position.set(0, 0.01, 0.12);
-      this.group.add(stock);
+    // Muzzle tip marker
+    this.barrelTip.position.set(0, 0.06, -shape.length * 0.92);
+    weaponRoot.add(this.barrelTip);
+
+    // Magazine (non-pistols)
+    if (shape.type !== 'pistol') {
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.07), darkMat);
+      mag.position.set(0, -0.1, -shape.length * 0.15);
+      weaponRoot.add(mag);
     }
 
-    // Scope for snipers
-    if (weaponId === 'operator' || weaponId === 'marshal' || weaponId === 'guardian') {
-      const scope = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.14), darkMat);
-      scope.position.set(0, 0.12, -shape.length * 0.35);
-      this.group.add(scope);
+    // Stock
+    if (shape.type === 'rifle' || shape.type === 'sniper') {
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.22), darkMat);
+      stock.position.set(0, 0.02, 0.16);
+      weaponRoot.add(stock);
     }
 
+    // Scope mesh for scoped weapons
+    if (shape.type === 'sniper' || weaponId === 'guardian') {
+      const scopeBody = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.22), darkMat);
+      scopeBody.position.set(0, 0.16, -shape.length * 0.38);
+      weaponRoot.add(scopeBody);
+      const scopeLens = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.04), accentMat);
+      scopeLens.position.set(0, 0.16, -shape.length * 0.5);
+      weaponRoot.add(scopeLens);
+    }
+
+    // SMG / rifle front grip
+    if (shape.type === 'rifle' || shape.type === 'smg') {
+      const fGrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), darkMat);
+      fGrip.position.set(0, -0.08, -shape.length * 0.45);
+      weaponRoot.add(fGrip);
+    }
+
+    this.group.add(weaponRoot);
+    weaponRoot.traverse(o => { if (o.isMesh) o.renderOrder = 999; });
+    this.weaponRoot = weaponRoot;
     this.currentWeaponId = weaponId;
+    this.currentShape = shape;
   }
 
   setWeapon(weaponId) {
@@ -85,35 +142,38 @@ export class ViewModel {
   }
 
   onFire() {
-    this.recoilOffset = 0.06;
+    this.recoilOffset = 0.08;
   }
 
-  update(dt, isMoving) {
-    // Recoil kick recovery
-    this.recoilOffset = THREE.MathUtils.lerp(this.recoilOffset, 0, dt * 12);
+  /** World-space muzzle position for tracers. */
+  getMuzzleWorldPosition(target = new THREE.Vector3()) {
+    this.barrelTip.updateWorldMatrix(true, false);
+    return target.setFromMatrixPosition(this.barrelTip.matrixWorld);
+  }
 
-    // Movement bob (Valorant-style subtle sway)
-    if (isMoving) this.bobTime += dt * 8;
-    else this.bobTime *= 0.9;
-    const bobY = isMoving ? Math.sin(this.bobTime) * 0.012 : 0;
-    const bobX = isMoving ? Math.cos(this.bobTime * 0.5) * 0.006 : 0;
+  update(dt, isMoving, isScoped) {
+    this.recoilOffset = THREE.MathUtils.lerp(this.recoilOffset, 0, dt * 14);
+    this.adsBlend = THREE.MathUtils.lerp(this.adsBlend, isScoped ? 1 : 0, dt * 12);
 
-    this.group.position.copy(this.basePos);
+    if (isMoving && !isScoped) this.bobTime += dt * 9;
+    else this.bobTime *= 0.85;
+
+    const bobY = isMoving && !isScoped ? Math.sin(this.bobTime) * 0.015 : 0;
+    const bobX = isMoving && !isScoped ? Math.cos(this.bobTime * 0.5) * 0.008 : 0;
+
+    // Interpolate hip ↔ ADS
+    this.group.position.lerpVectors(this.hipPos, this.adsPos, this.adsBlend);
     this.group.position.y += bobY;
-    this.group.position.x += bobX;
+    this.group.position.x += bobX * (1 - this.adsBlend);
     this.group.position.z += this.recoilOffset;
 
-    this.group.rotation.copy(this.baseRot);
-    this.group.rotation.x -= this.recoilOffset * 2;
+    const rot = new THREE.Euler().setFromQuaternion(
+      new THREE.Quaternion().setFromEuler(this.hipRot).slerp(
+        new THREE.Quaternion().setFromEuler(this.adsRot),
+        this.adsBlend
+      )
+    );
+    this.group.rotation.copy(rot);
+    this.group.rotation.x -= this.recoilOffset * 2.5;
   }
-}
-
-/** Keep view model visible while world uses default layer. */
-export function setupFpsLayers(camera, scene) {
-  camera.layers.enable(0);
-  camera.layers.enable(1);
-}
-
-export function hideViewModelFromWorld(viewModelGroup) {
-  viewModelGroup.traverse((o) => { o.layers.set(1); });
 }

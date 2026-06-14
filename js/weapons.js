@@ -182,8 +182,8 @@ export const WEAPONS = {
     recoilRecovery: 0.30,
     range: 50,
     scope: true,
+    scopeHFov: 55,
   },
-  vandal: {
     id: 'vandal',
     name: 'Vandal',
     category: 'rifles',
@@ -235,6 +235,7 @@ export const WEAPONS = {
     recoilRecovery: 0.60,
     range: 50,
     scope: true,
+    scopeHFov: 40,
   },
   operator: {
     id: 'operator',
@@ -253,6 +254,7 @@ export const WEAPONS = {
     recoilRecovery: 0.80,
     range: 50,
     scope: true,
+    scopeHFov: 25,
     boltAction: true,
   },
 };
@@ -290,10 +292,9 @@ export function createWeaponState(weaponId) {
 }
 
 /**
- * Get recoil offset for current shot in spray.
- * Returns { pitch, yaw } in radians to apply to view and bullet direction.
+ * View kick applied to camera after each shot.
  */
-export function getRecoilOffset(weaponState, moving, airborne) {
+export function getViewKick(weaponState) {
   const { def, shotsFired } = weaponState;
   let pitch = 0;
   let yaw = 0;
@@ -304,23 +305,52 @@ export function getRecoilOffset(weaponState, moving, airborne) {
     pitch = v * (Math.PI / 180);
     yaw = h * (Math.PI / 180);
   } else if (!def.recoilPattern && shotsFired > 0) {
-    pitch = 0.02 * (Math.PI / 180) * shotsFired;
+    pitch = 0.15 * (Math.PI / 180);
   }
 
-  // Movement inaccuracy multiplier
+  return { pitch: pitch * 0.9, yaw: yaw * 0.9 };
+}
+
+/**
+ * Bullet spread offset in radians — separate from view kick (Valorant-style).
+ * First shot while still + scoped = near perfect accuracy.
+ */
+export function getBulletSpread(weaponState, moving, airborne, scoped) {
+  const { def, shotsFired } = weaponState;
   let inaccuracy = def.firstShotAccuracy;
-  if (moving) inaccuracy *= 3.5;
+
+  if (scoped) inaccuracy *= 0.15;
+  if (moving) inaccuracy *= scoped ? 2.0 : 3.5;
   if (airborne) inaccuracy *= 5;
 
-  // Add random spread within inaccuracy cone
+  // Spray pattern adds to bullet path (not random on first shot)
+  let patternPitch = 0;
+  let patternYaw = 0;
+  if (def.recoilPattern && shotsFired > 1) {
+    const idx = Math.min(shotsFired - 2, def.recoilPattern.length - 1);
+    const [h, v] = def.recoilPattern[idx];
+    patternPitch = v * (Math.PI / 180) * 0.6;
+    patternYaw = h * (Math.PI / 180) * 0.6;
+  }
+
   const spreadYaw = (Math.random() - 0.5) * inaccuracy * 2;
   const spreadPitch = (Math.random() - 0.5) * inaccuracy * 2;
 
   return {
-    pitch: pitch + spreadPitch,
-    yaw: yaw + spreadYaw,
-    viewKickPitch: pitch * 0.85,
-    viewKickYaw: yaw * 0.85,
+    pitch: patternPitch + spreadPitch,
+    yaw: patternYaw + spreadYaw,
+  };
+}
+
+/** @deprecated use getViewKick + getBulletSpread */
+export function getRecoilOffset(weaponState, moving, airborne, scoped = false) {
+  const kick = getViewKick(weaponState);
+  const spread = getBulletSpread(weaponState, moving, airborne, scoped);
+  return {
+    pitch: spread.pitch,
+    yaw: spread.yaw,
+    viewKickPitch: kick.pitch,
+    viewKickYaw: kick.yaw,
   };
 }
 
