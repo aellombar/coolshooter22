@@ -184,6 +184,7 @@ export const WEAPONS = {
     scope: true,
     scopeHFov: 55,
   },
+  vandal: {
     id: 'vandal',
     name: 'Vandal',
     category: 'rifles',
