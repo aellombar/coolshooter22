@@ -417,8 +417,9 @@ export class Player {
     this._wasMouseDown = this.mouseDown;
 
     const wantsFire = w.def.automatic ? this.mouseDown : justPressed;
+    const canShoot = opts.canShoot !== false;
 
-    if (wantsFire && canFire(w, now)) {
+    if (canShoot && wantsFire && canFire(w, now)) {
       this._fire(now);
     }
 

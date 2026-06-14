@@ -25,6 +25,7 @@ export class Game {
     this.roundTimer = ROUND_TIME;
     this.spikePlanted = false;
     this.stats = new MatchStats();
+    this._roundTransitionTimer = null;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -48,8 +49,16 @@ export class Game {
     this._bindResize();
   }
 
+  _clearRoundTransitionTimer() {
+    if (this._roundTransitionTimer != null) {
+      clearTimeout(this._roundTransitionTimer);
+      this._roundTransitionTimer = null;
+    }
+  }
+
   start() {
     this.running = false;
+    this._clearRoundTransitionTimer();
 
     if (this.player?.viewModel?.group) {
       this.camera.remove(this.player.viewModel.group);
@@ -152,6 +161,7 @@ export class Game {
 
   stop() {
     this.running = false;
+    this._clearRoundTransitionTimer();
     document.exitPointerLock?.();
     showScoreboard(false);
   }
@@ -167,13 +177,19 @@ export class Game {
       if (this.buyTimer <= 0) this._endBuyPhase();
     } else if (this.roundPhase === 'combat') {
       this.roundTimer -= dt;
-      if (this.roundTimer <= 0) this._endRound('defenders');
+      const allBotsDead = this.bots?.every(b => !b.alive);
+      if (allBotsDead) {
+        this._endRound('attackers');
+      } else if (this.roundTimer <= 0) {
+        this._endRound('defenders');
+      }
     }
 
     if (this.player) {
       this.player.update(dt, this.plantSites, {
         colliders: this._getActiveColliders(),
         movementLocked: false,
+        canShoot: this.roundPhase === 'combat',
       });
       this._clampToSpawn();
       setBuyAllowed(this.canBuy());
@@ -190,10 +206,6 @@ export class Game {
       const priority = bot.id === closestId ? 0 : 1;
       const shot = bot.update(dt, this.player, this.colliders, priority);
       if (shot) this._handleBotShot(shot);
-    }
-
-    if (this.bots?.every(b => !b.alive) && this.roundPhase === 'combat') {
-      this._endRound('attackers');
     }
 
     if (this.player && !this.player.alive && this.roundPhase === 'combat') {
@@ -224,7 +236,7 @@ export class Game {
   }
 
   _handlePlayerShot({ hitOrigin, muzzle, direction, weaponDef }) {
-    if (this.roundPhase === 'buy') return;
+    if (this.roundPhase !== 'combat') return;
 
     const maxDist = Math.max(120, (weaponDef.range ?? 50) * 4);
     const hit = raycastHit(hitOrigin, direction, this.bots, maxDist, this.wallMeshes ?? []);
@@ -306,15 +318,20 @@ export class Game {
       this._showOverlay('ROUND LOST', 3000);
     }
 
-    setTimeout(() => this._newRound(), 3500);
+    this._clearRoundTransitionTimer();
+    this._roundTransitionTimer = setTimeout(() => {
+      this._roundTransitionTimer = null;
+      this._newRound();
+    }, 3500);
   }
 
   _newRound() {
+    if (!this.running) return;
     this.round++;
     this.spikePlanted = false;
 
     this.player.spawn(this.spawnPoint);
-    this.player.credits = Math.min(this.player.credits + 3000, 9000);
+    this.player.credits = Math.min(this.player.credits, 9000);
     this.player.hasSpike = true;
     this.player.roundSpikePlanted = false;
 
