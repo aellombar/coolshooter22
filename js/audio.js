@@ -1,5 +1,5 @@
 /**
- * Procedural gunshot sounds via Web Audio API.
+ * Procedural audio via Web Audio API — gunshots + footsteps.
  */
 class AudioManager {
   constructor() {
@@ -25,6 +25,19 @@ class AudioManager {
       case 'smg': this._smg(); break;
       default: this._pistol(); break;
     }
+  }
+
+  /** @param {'run'|'walk'|'crouch'} mode */
+  playFootstep(mode = 'run') {
+    this.unlock();
+    if (!this.ctx) return;
+
+    const vol = mode === 'crouch' ? 0.08 : mode === 'walk' ? 0.1 : 0.14;
+    const freq = mode === 'crouch' ? 90 : mode === 'walk' ? 110 : 130;
+    const dur = mode === 'crouch' ? 0.04 : 0.05;
+
+    this._noise(dur, vol, freq);
+    this._tone(freq * 0.6, dur * 0.8, vol * 0.35, 'sine');
   }
 
   _category(id) {

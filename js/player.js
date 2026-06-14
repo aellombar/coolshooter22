@@ -13,6 +13,7 @@ const GRAVITY = 38;
 const JUMP_HEIGHT = 0.945;
 const JUMP_FORCE = Math.sqrt(2 * GRAVITY * JUMP_HEIGHT);
 const WALK_SPEED = 5.4;
+const SLOW_WALK_SPEED = 2.98;
 const CROUCH_SPEED = 2.74;
 const AIR_CONTROL = 0.22;
 const PLAYER_HEIGHT = 1.6;
@@ -50,7 +51,10 @@ export class Player {
     this.isMoving = false;
     this.isGrounded = true;
     this.isCrouching = false;
+    this.isSlowWalking = false;
     this._wasJumpKey = false;
+    this._eyeHeight = PLAYER_HEIGHT;
+    this._footstepTimer = 0;
 
     this.planting = false;
     this.plantProgress = 0;
@@ -90,6 +94,8 @@ export class Player {
     this.planting = false;
     this.plantProgress = 0;
     this.isScoped = false;
+    this._eyeHeight = PLAYER_HEIGHT;
+    this._footstepTimer = 0;
     this.viewModel.setWeapon('classic');
     this._updateScopeUI();
     this._updateCamera();
@@ -271,6 +277,9 @@ export class Player {
     this.recoilPitch = THREE.MathUtils.lerp(this.recoilPitch, 0, recovery);
     this.recoilYaw = THREE.MathUtils.lerp(this.recoilYaw, 0, recovery);
 
+    this.isCrouching = this.keys['ControlLeft'] || this.keys['ControlRight'];
+    const shiftHeld = this.keys['ShiftLeft'] || this.keys['ShiftRight'];
+
     let speed = this.isCrouching ? CROUCH_SPEED : (w.def.runSpeed || WALK_SPEED);
     if (this.isScoped) speed *= 0.45;
 
@@ -283,14 +292,17 @@ export class Player {
     if (this.keys['KeyA']) moveDir.sub(right);
     if (this.keys['KeyD']) moveDir.add(right);
 
-    this.isCrouching = this.keys['ControlLeft'] || this.keys['ControlRight'];
     this.isMoving = moveDir.lengthSq() > 0;
+    this.isSlowWalking = shiftHeld && !this.isCrouching && this.isGrounded && this.isMoving;
+    if (this.isSlowWalking) speed = SLOW_WALK_SPEED;
 
     const moveMul = this.isGrounded ? 1 : AIR_CONTROL;
     if (this.isMoving) {
       moveDir.normalize().multiplyScalar(speed * dt * moveMul);
       this.position.add(moveDir);
     }
+
+    this._updateFootsteps(dt, speed);
 
     const wantsJump = this.keys['Space'] && !this._wasJumpKey;
     this._wasJumpKey = this.keys['Space'];
@@ -428,9 +440,35 @@ export class Player {
     }
   }
 
+  _updateFootsteps(dt, speed) {
+    if (!this.isMoving || !this.isGrounded || !this.alive) return;
+
+    let mode = 'run';
+    let interval = 0.38;
+    if (this.isCrouching) {
+      mode = 'crouch';
+      interval = 0.72;
+    } else if (this.isSlowWalking) {
+      mode = 'walk';
+      interval = 0.58;
+    } else {
+      interval = THREE.MathUtils.mapLinear(speed, 4, 6, 0.42, 0.32);
+    }
+
+    this._footstepTimer -= dt;
+    if (this._footstepTimer <= 0) {
+      audio.playFootstep(mode);
+      this._footstepTimer = interval;
+    }
+  }
+
   _updateCamera() {
-    const height = this.isCrouching ? PLAYER_CROUCH_HEIGHT : PLAYER_HEIGHT;
-    this.position.y = Math.max(height, this.position.y);
+    const targetHeight = this.isCrouching ? PLAYER_CROUCH_HEIGHT : PLAYER_HEIGHT;
+    this._eyeHeight = THREE.MathUtils.lerp(this._eyeHeight, targetHeight, 0.18);
+    if (this.isGrounded) {
+      this.position.y = Math.max(this._eyeHeight, this.position.y);
+      if (!this.isCrouching && this.velocity.y <= 0) this.position.y = this._eyeHeight;
+    }
     this.camera.position.copy(this.position);
 
     const totalPitch = this.pitch + this.recoilPitch;

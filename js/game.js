@@ -6,6 +6,7 @@ import { applyValorantFov, horizontalToVerticalFov, VALORANT_H_FOV } from './set
 import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
 import { getWeaponDamage } from './weapons.js';
 import { audio } from './audio.js';
+import { BulletDecalManager, raycastWallHit } from './bulletDecals.js';
 
 export class Game {
   constructor(canvas) {
@@ -73,6 +74,7 @@ export class Game {
     this.scene.add(this.camera);
 
     this.bots = createBotTeam(this.scene, this.colliders, this.defenderSpawns);
+    this.decalManager = new BulletDecalManager(this.scene);
 
     initBuyMenu((purchase) => this._handlePurchase(purchase));
 
@@ -118,15 +120,16 @@ export class Game {
       this.player.update(dt, this.plantSites);
     }
 
-    // Prioritize closest 2 bots for shooting (others hold angle but don't beam)
+    // Only the closest bot shoots at a time
     const livingBots = (this.bots ?? []).filter(b => b.alive);
     livingBots.sort((a, b) =>
       a.position.distanceTo(this.player.position) - b.position.distanceTo(this.player.position)
     );
-    const shootRank = new Map(livingBots.map((b, i) => [b.id, i]));
+    const closestId = livingBots[0]?.id;
 
     for (const bot of this.bots ?? []) {
-      const shot = bot.update(dt, this.player, this.colliders, shootRank.get(bot.id) ?? 99);
+      const priority = bot.id === closestId ? 0 : 1;
+      const shot = bot.update(dt, this.player, this.colliders, priority);
       if (shot) this._handleBotShot(shot);
     }
 
@@ -162,8 +165,13 @@ export class Game {
   _handlePlayerShot({ hitOrigin, muzzle, direction, weaponDef }) {
     const maxDist = (weaponDef.range ?? 50) * 3;
     const hit = raycastHit(hitOrigin, direction, this.bots, maxDist, this.wallMeshes ?? []);
-    const hitPoint = hit ? hit.hit.point : null;
+    const wallHit = raycastWallHit(hitOrigin, direction, this.wallMeshes ?? [], maxDist);
+    const hitPoint = hit ? hit.hit.point : (wallHit ? wallHit.point : null);
     createBulletTracer(this.scene, muzzle, direction, maxDist, hitPoint);
+
+    if (wallHit && (!hit || wallHit.distance <= hit.distance)) {
+      this.decalManager?.add(wallHit.point, wallHit.normal);
+    }
 
     if (hit) {
       const dmg = getWeaponDamage(weaponDef, hit.hitZone);

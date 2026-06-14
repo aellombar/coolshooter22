@@ -13,10 +13,9 @@ const AGENT_STYLES = {
   Sage: { suit: 0x50a890, accent: 0x00ffcc, skin: 0xf0d0b0, hair: 0x1a3040 },
 };
 
-function makeMat(color, emissive = 0x000000, emInt = 0) {
+function makeMat(color) {
   return new THREE.MeshStandardMaterial({
-    color, roughness: 0.55, metalness: 0.15,
-    emissive, emissiveIntensity: emInt,
+    color, roughness: 0.6, metalness: 0.12,
   });
 }
 
@@ -61,18 +60,23 @@ export class Bot {
     this.weapon = createWeaponState('vandal');
     this.weapon.ammo = 25;
 
-    // Human-like timing
-    this.reactionTime = 0.55 + Math.random() * 0.55;
+    this.reactionTime = 0.65 + Math.random() * 0.75;
     this.spottedAt = 0;
     this.burstSize = 2 + Math.floor(Math.random() * 2);
     this.burstShotsLeft = 0;
     this.burstPauseUntil = 0;
-    this.baseAccuracy = 0.08 + Math.random() * 0.07;
-    this.seeRange = 38;
-    this.shootRange = 28;
-    this.canShootThisFrame = false;
-    this.isAimingAtPlayer = false;
+    this.baseAccuracy = 0.1 + Math.random() * 0.08;
+    this.seeRange = 36;
+    this.fightRange = 22;
+    this.holdRange = 11;
     this.canSeePlayer = false;
+
+    this.holdUntil = 0;
+    this.strafeDir = Math.random() < 0.5 ? -1 : 1;
+    this.strafeSwapAt = 0;
+    this.lookSweep = 0;
+    this.gunRecoil = 0;
+    this.moveSpeed = 0;
 
     this._buildModel(scene);
   }
@@ -88,7 +92,6 @@ export class Bot {
     this.mesh = new THREE.Group();
     this.mesh.userData.bot = this;
 
-    // Legs
     const legGeo = new THREE.BoxGeometry(0.22, 0.55, 0.22);
     this.legL = new THREE.Mesh(legGeo, dark);
     this.legL.position.set(-0.14, -0.28, 0);
@@ -98,13 +101,11 @@ export class Bot {
     this.legR.userData = { bot: this, hitZone: 'leg' };
     this.mesh.add(this.legL, this.legR);
 
-    // Torso
     this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.72, 0.34), suit);
     this.torso.position.y = 0.38;
     this.torso.userData = { bot: this, hitZone: 'body' };
     this.mesh.add(this.torso);
 
-    // Shoulder pads
     const padGeo = new THREE.BoxGeometry(0.18, 0.12, 0.22);
     const padL = new THREE.Mesh(padGeo, accent);
     padL.position.set(-0.38, 0.62, 0);
@@ -114,29 +115,16 @@ export class Bot {
     padR.userData = { bot: this, hitZone: 'body' };
     this.mesh.add(padL, padR);
 
-    // Head
     this.headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), skin);
     this.headMesh.position.y = 0.98;
     this.headMesh.userData = { bot: this, hitZone: 'head' };
     this.mesh.add(this.headMesh);
 
-    // Hair / hood
     const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.4), hair);
     hairMesh.position.y = 1.18;
     hairMesh.userData = { bot: this, hitZone: 'head' };
     this.mesh.add(hairMesh);
 
-    // Eyes — glow red when targeting player
-    const eyeGeo = new THREE.BoxGeometry(0.07, 0.05, 0.04);
-    this.eyeMat = makeMat(0x222222);
-    this.eyeMatTarget = makeMat(0xff3344, 0xff0000, 1.2);
-    this.eyeL = new THREE.Mesh(eyeGeo, this.eyeMat.clone());
-    this.eyeL.position.set(-0.09, 1.0, -0.2);
-    this.eyeR = new THREE.Mesh(eyeGeo, this.eyeMat.clone());
-    this.eyeR.position.set(0.09, 1.0, -0.2);
-    this.mesh.add(this.eyeL, this.eyeR);
-
-    // Weapon group — rotates toward aim
     this.gunGroup = new THREE.Group();
     this.gunGroup.position.set(0.28, 0.48, -0.08);
     const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.55), dark);
@@ -146,20 +134,6 @@ export class Bot {
     this.gunGroup.add(gunBody, gunBarrel);
     this.mesh.add(this.gunGroup);
 
-    // Aim laser — visible when locking onto player
-    const laserGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0, 0, -1.5),
-    ]);
-    this.aimLaser = new THREE.Line(
-      laserGeo,
-      new THREE.LineBasicMaterial({ color: 0xff3344, transparent: true, opacity: 0.55 }),
-    );
-    this.aimLaser.visible = false;
-    this.aimLaser.position.set(0, 0.04, -0.62);
-    this.gunGroup.add(this.aimLaser);
-
-    // Name tag
     this.nameTag = createNameLabel(this.name);
     this.mesh.add(this.nameTag);
 
@@ -170,6 +144,7 @@ export class Bot {
 
   pickPatrolTarget() {
     this.patrolTarget.copy(PATROL_POINTS[Math.floor(Math.random() * PATROL_POINTS.length)]);
+    this.holdUntil = 0;
   }
 
   spawn(pos) {
@@ -185,11 +160,11 @@ export class Bot {
     this.spottedAt = 0;
     this.burstShotsLeft = 0;
     this.burstPauseUntil = 0;
-    this.isAimingAtPlayer = false;
     this.canSeePlayer = false;
+    this.holdUntil = 0;
   }
 
-  takeDamage(amount, hitZone = 'body') {
+  takeDamage(amount) {
     if (!this.alive) return;
     const { healthDmg } = applyArmorDamage(amount, this);
     this.health -= healthDmg;
@@ -202,25 +177,11 @@ export class Bot {
   }
 
   _flashHit() {
-    const parts = [this.torso, this.headMesh, this.legL, this.legR];
-    for (const m of parts) {
+    for (const m of [this.torso, this.headMesh, this.legL, this.legR]) {
       const prev = m.material.color.getHex();
       m.material.color.setHex(0xffffff);
       setTimeout(() => m.material.color.setHex(prev), 80);
     }
-  }
-
-  _setTargeting(on) {
-    this.isAimingAtPlayer = on;
-    const mat = on ? this.eyeMatTarget : this.eyeMat;
-    for (const eye of [this.eyeL, this.eyeR]) {
-      eye.material.color.copy(mat.color);
-      eye.material.emissive.copy(mat.emissive);
-      eye.material.emissiveIntensity = on ? 1.2 : 0;
-    }
-    this.aimLaser.visible = on;
-    this.torso.material.emissive.setHex(on ? 0x330808 : 0x000000);
-    this.torso.material.emissiveIntensity = on ? 0.25 : 0;
   }
 
   update(dt, player, colliders, shootPriority = 0) {
@@ -236,97 +197,133 @@ export class Bot {
       );
     this.canSeePlayer = canSee;
 
-    // Name only when you have line of sight — no wallhack ESP
     if (this.nameTag) {
       this.nameTag.visible = canSee && distToPlayer < this.seeRange;
     }
 
-    // State machine with reaction delay
+    // ── State machine ──
     if (canSee) {
-      if (this.state === 'patrol') {
+      if (this.state === 'patrol' || this.state === 'hold') {
         this.state = 'alert';
         this.spottedAt = now;
         this.target = player.position.clone();
       } else {
         this.target = player.position.clone();
       }
-    } else if (this.state !== 'patrol') {
+    } else if (this.state === 'alert' || this.state === 'fight' || this.state === 'push') {
       this.state = 'patrol';
       this.target = null;
-      this._setTargeting(false);
     }
 
     const reacted = this.state !== 'alert' || (now - this.spottedAt >= this.reactionTime);
     if (canSee && reacted) {
-      this.state = distToPlayer < this.shootRange ? 'engage' : 'chase';
+      if (distToPlayer > this.fightRange) this.state = 'push';
+      else if (distToPlayer > this.holdRange) this.state = 'fight';
+      else this.state = 'fight';
     }
 
-    // Smooth aim toward player
-    if (this.target && canSee) {
+    // ── Aim (smooth, not snap) ──
+    const aimSpeed = this.state === 'alert' ? 2.5 : 4.5;
+    if (this.target && (canSee || this.state === 'push')) {
       const dx = this.target.x - this.position.x;
-      const dy = (this.target.y + 0.1) - 1.4;
+      const dy = (this.target.y + 0.05) - 1.45;
       const dz = this.target.z - this.position.z;
       const horiz = Math.hypot(dx, dz) || 1;
       const targetYaw = Math.atan2(-dx, -dz);
       const targetPitch = Math.atan2(dy, horiz);
-      this.yaw = THREE.MathUtils.lerp(this.yaw, targetYaw, dt * 6);
-      this.aimPitch = THREE.MathUtils.lerp(this.aimPitch, targetPitch, dt * 5);
-    } else if (this.target) {
-      const dx = this.target.x - this.position.x;
-      const dz = this.target.z - this.position.z;
-      const targetYaw = Math.atan2(-dx, -dz);
-      this.yaw = THREE.MathUtils.lerp(this.yaw, targetYaw, dt * 4);
-      this.aimPitch = THREE.MathUtils.lerp(this.aimPitch, 0, dt * 4);
+      this.yaw = THREE.MathUtils.lerp(this.yaw, targetYaw, dt * aimSpeed);
+      this.aimPitch = THREE.MathUtils.lerp(this.aimPitch, targetPitch, dt * aimSpeed * 0.85);
     }
 
-    const speed = 3.2;
-    if (this.state === 'chase' && this.target) {
+    // ── Movement ──
+    this.moveSpeed = 0;
+    const walkSpeed = 2.6;
+    const runSpeed = 3.4;
+
+    if (this.state === 'push' && this.target) {
       const dir = this.target.clone().sub(this.position).setY(0);
-      if (dir.length() > 5) {
-        dir.normalize().multiplyScalar(speed * dt);
+      if (dir.length() > this.fightRange * 0.85) {
+        dir.normalize().multiplyScalar(runSpeed * dt);
         this.position.add(dir);
+        this.position = resolveCollision(this.position, this.colliders);
+        this.moveSpeed = runSpeed;
+      }
+    } else if (this.state === 'fight' && canSee) {
+      // Strafe at fighting distance — don't run into player face
+      if (now >= this.strafeSwapAt) {
+        this.strafeDir *= -1;
+        this.strafeSwapAt = now + 0.9 + Math.random() * 1.2;
+      }
+      const strafe = new THREE.Vector3(
+        Math.cos(this.yaw) * this.strafeDir,
+        0,
+        -Math.sin(this.yaw) * this.strafeDir,
+      );
+      strafe.normalize().multiplyScalar(walkSpeed * 0.55 * dt);
+      this.position.add(strafe);
+      this.position = resolveCollision(this.position, this.colliders);
+      this.moveSpeed = walkSpeed * 0.55;
+
+      // Back up if too close
+      if (distToPlayer < this.holdRange * 0.7) {
+        const back = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw))
+          .multiplyScalar(walkSpeed * 0.4 * dt);
+        this.position.add(back);
         this.position = resolveCollision(this.position, this.colliders);
       }
     } else if (this.state === 'patrol') {
       const dir = this.patrolTarget.clone().sub(this.position).setY(0);
-      if (dir.length() < 2) {
-        this.pickPatrolTarget();
+      if (dir.length() < 1.5) {
+        this.state = 'hold';
+        this.holdUntil = now + 2 + Math.random() * 3;
+        this.lookSweep = this.yaw;
       } else {
-        dir.normalize().multiplyScalar(speed * 0.55 * dt);
+        dir.normalize().multiplyScalar(walkSpeed * dt);
         this.position.add(dir);
         this.position = resolveCollision(this.position, this.colliders);
+        this.moveSpeed = walkSpeed;
+        this.yaw = THREE.MathUtils.lerp(this.yaw, Math.atan2(-dir.x, -dir.z), dt * 5);
+        this.aimPitch = THREE.MathUtils.lerp(this.aimPitch, 0, dt * 4);
       }
-      const dx = this.patrolTarget.x - this.position.x;
-      const dz = this.patrolTarget.z - this.position.z;
-      this.yaw = Math.atan2(-dx, -dz);
+    } else if (this.state === 'hold') {
+      this.lookSweep += dt * 0.35 * (this.id % 2 === 0 ? 1 : -1);
+      this.yaw = THREE.MathUtils.lerp(this.yaw, this.lookSweep, dt * 2);
+      this.aimPitch = THREE.MathUtils.lerp(this.aimPitch, 0, dt * 3);
+      if (now >= this.holdUntil) {
+        this.state = 'patrol';
+        this.pickPatrolTarget();
+      }
     }
 
-    // Only closest 2 bots fire; all bots show "looking at you" when they see you
-    const lockingOn = canSee && reacted &&
-      (this.state === 'engage' || this.state === 'chase') &&
-      distToPlayer < this.seeRange;
-    this.canShootThisFrame = lockingOn && this.state === 'engage' &&
-      distToPlayer < this.shootRange && shootPriority < 2;
-    this._setTargeting(lockingOn);
-
+    // ── Visuals ──
     this.mesh.position.x = this.position.x;
     this.mesh.position.z = this.position.z;
     this.mesh.rotation.y = this.yaw;
-    this.headMesh.rotation.x = -this.aimPitch * 0.55;
-    this.gunGroup.rotation.x = -this.aimPitch;
-    this.gunGroup.rotation.y = 0.08;
+    this.headMesh.rotation.x = -this.aimPitch * 0.45;
+    this.gunRecoil = THREE.MathUtils.lerp(this.gunRecoil, 0, dt * 16);
+    this.gunGroup.rotation.x = -this.aimPitch + this.gunRecoil;
+    this.gunGroup.rotation.y = 0.06;
 
-    // Burst fire — tap-like, not full spray
+    // Leg bob when moving
+    const bob = this.moveSpeed > 0 ? Math.sin(now * 9) * 0.04 : 0;
+    this.legL.position.y = -0.28 + bob;
+    this.legR.position.y = -0.28 - bob;
+
+    // ── Shooting (only closest bot, burst fire) ──
     let shot = null;
-    if (this.canShootThisFrame && now >= this.burstPauseUntil) {
+    const canShoot = canSee && reacted && this.state === 'fight' &&
+      distToPlayer < this.fightRange && shootPriority === 0;
+
+    if (canShoot && now >= this.burstPauseUntil) {
       if (this.burstShotsLeft <= 0) {
         this.burstShotsLeft = this.burstSize;
       }
       if (canFire(this.weapon, now) && this.burstShotsLeft > 0) {
         fireWeapon(this.weapon, now);
         this.burstShotsLeft--;
+        this.gunRecoil = 0.12;
         if (this.burstShotsLeft === 0) {
-          this.burstPauseUntil = now + 0.65 + Math.random() * 0.75;
+          this.burstPauseUntil = now + 0.85 + Math.random() * 1.1;
         }
 
         const aimOrigin = this.position.clone().setY(1.45);
@@ -336,12 +333,10 @@ export class Bot {
           -Math.cos(this.yaw) * Math.cos(this.aimPitch),
         ).normalize();
 
-        // Human-like inaccuracy — worse at range and while moving
-        const moving = this.state === 'chase';
-        const distAcc = this.baseAccuracy + distToPlayer * 0.004;
-        const spread = distAcc + (moving ? 0.06 : 0);
+        const spread = this.baseAccuracy + distToPlayer * 0.005 +
+          (this.moveSpeed > 0 ? 0.05 : 0.02);
         dir.x += (Math.random() - 0.5) * spread;
-        dir.y += (Math.random() - 0.5) * spread * 0.7;
+        dir.y += (Math.random() - 0.5) * spread * 0.65;
         dir.z += (Math.random() - 0.5) * spread;
         dir.normalize();
 
