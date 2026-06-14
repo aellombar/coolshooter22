@@ -531,7 +531,7 @@ input[type="range"] {
   background: rgba(15, 25, 35, 0.96);
   border: 1px solid rgba(255, 70, 85, 0.5);
   padding: 1.25rem 1.5rem;
-  width: min(920px, 94vw);
+  width: min(1100px, 96vw);
   max-height: 88vh;
   overflow-y: auto;
 }
@@ -598,8 +598,27 @@ input[type="range"] {
 
 .buy-sections {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
+}
+
+.buy-section-head {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.buy-section-head h3 {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  opacity: 0.5;
+  margin-bottom: 0.15rem;
+}
+
+.buy-section-hint {
+  font-size: 0.6rem;
+  opacity: 0.35;
+  letter-spacing: 0.04em;
 }
 
 .buy-section h3 {
@@ -618,11 +637,12 @@ input[type="range"] {
 }
 
 .buy-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.1rem;
-  padding: 0.5rem 0.6rem;
+  gap: 0.35rem;
+  padding: 0.65rem 0.7rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--valorant-accent);
@@ -630,6 +650,70 @@ input[type="range"] {
   text-align: left;
   transition: border-color 0.12s, background 0.12s;
   font-family: inherit;
+}
+
+.buy-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.buy-item-damage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.65rem;
+  font-size: 0.68rem;
+  opacity: 0.85;
+}
+
+.dmg-stat b {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.dmg-head b { color: #ff6b6b; }
+.dmg-body b { color: var(--valorant-accent); }
+.dmg-leg b { color: #aaa; }
+
+.buy-item-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.55rem;
+  font-size: 0.62rem;
+  opacity: 0.5;
+  line-height: 1.4;
+}
+
+.buy-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.wtag {
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.35rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0.7;
+}
+
+.buy-item-badge {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.45rem;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  color: var(--valorant-green);
+  font-weight: 700;
+}
+
+.buy-item.owned {
+  border-color: rgba(15, 181, 174, 0.35);
+  background: rgba(15, 181, 174, 0.06);
 }
 
 .buy-item:hover:not(.disabled) {

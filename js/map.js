@@ -15,6 +15,7 @@ import * as THREE from 'three';
  */
 export function buildMap(scene) {
   const mapObjects = [];
+  const wallMeshes = [];
   const colliders = [];
 
   const mats = {
@@ -47,8 +48,10 @@ export function buildMap(scene) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
     mesh.position.set(x, y + h / 2, z);
     mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.blocker = true;
     scene.add(mesh);
     mapObjects.push(mesh);
+    wallMeshes.push(mesh);
     colliders.push({
       min: { x: x - w / 2, y, z: z - d / 2 },
       max: { x: x + w / 2, y: y + h, z: z + d / 2 },
@@ -207,6 +210,7 @@ export function buildMap(scene) {
 
   return {
     mapObjects,
+    wallMeshes,
     colliders,
     plantSites,
     spawnPoint,
@@ -305,7 +309,6 @@ export function resolveCollision(pos, colliders, radius = 0.35) {
     }
   }
 
-  result.y = Math.max(1.6, result.y);
   return result;
 }
 

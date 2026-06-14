@@ -32,11 +32,11 @@ function createNameLabel(name) {
   ctx.textAlign = 'center';
   ctx.fillText(name.toUpperCase(), 128, 42);
   const tex = new THREE.CanvasTexture(c);
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(1.4, 0.35, 1);
   sprite.position.y = 2.15;
-  sprite.renderOrder = 998;
+  sprite.visible = false;
   return sprite;
 }
 
@@ -72,6 +72,7 @@ export class Bot {
     this.shootRange = 28;
     this.canShootThisFrame = false;
     this.isAimingAtPlayer = false;
+    this.canSeePlayer = false;
 
     this._buildModel(scene);
   }
@@ -107,8 +108,10 @@ export class Bot {
     const padGeo = new THREE.BoxGeometry(0.18, 0.12, 0.22);
     const padL = new THREE.Mesh(padGeo, accent);
     padL.position.set(-0.38, 0.62, 0);
+    padL.userData = { bot: this, hitZone: 'body' };
     const padR = new THREE.Mesh(padGeo, accent);
     padR.position.set(0.38, 0.62, 0);
+    padR.userData = { bot: this, hitZone: 'body' };
     this.mesh.add(padL, padR);
 
     // Head
@@ -120,6 +123,7 @@ export class Bot {
     // Hair / hood
     const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.4), hair);
     hairMesh.position.y = 1.18;
+    hairMesh.userData = { bot: this, hitZone: 'head' };
     this.mesh.add(hairMesh);
 
     // Eyes — glow red when targeting player
@@ -182,6 +186,7 @@ export class Bot {
     this.burstShotsLeft = 0;
     this.burstPauseUntil = 0;
     this.isAimingAtPlayer = false;
+    this.canSeePlayer = false;
   }
 
   takeDamage(amount, hitZone = 'body') {
@@ -229,6 +234,12 @@ export class Bot {
         player.position.clone(),
         colliders,
       );
+    this.canSeePlayer = canSee;
+
+    // Name only when you have line of sight — no wallhack ESP
+    if (this.nameTag) {
+      this.nameTag.visible = canSee && distToPlayer < this.seeRange;
+    }
 
     // State machine with reaction delay
     if (canSee) {

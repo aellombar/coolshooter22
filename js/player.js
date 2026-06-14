@@ -9,10 +9,12 @@ import { resolveCollision } from './map.js';
 import { ViewModel } from './viewModel.js';
 import { audio } from './audio.js';
 
-const GRAVITY = 20;
-const JUMP_FORCE = 7;
+const GRAVITY = 38;
+const JUMP_HEIGHT = 0.945;
+const JUMP_FORCE = Math.sqrt(2 * GRAVITY * JUMP_HEIGHT);
 const WALK_SPEED = 5.4;
 const CROUCH_SPEED = 2.74;
+const AIR_CONTROL = 0.22;
 const PLAYER_HEIGHT = 1.6;
 const PLAYER_CROUCH_HEIGHT = 1.0;
 
@@ -48,6 +50,7 @@ export class Player {
     this.isMoving = false;
     this.isGrounded = true;
     this.isCrouching = false;
+    this._wasJumpKey = false;
 
     this.planting = false;
     this.plantProgress = 0;
@@ -283,22 +286,29 @@ export class Player {
     this.isCrouching = this.keys['ControlLeft'] || this.keys['ControlRight'];
     this.isMoving = moveDir.lengthSq() > 0;
 
+    const moveMul = this.isGrounded ? 1 : AIR_CONTROL;
     if (this.isMoving) {
-      moveDir.normalize().multiplyScalar(speed * dt);
+      moveDir.normalize().multiplyScalar(speed * dt * moveMul);
       this.position.add(moveDir);
     }
 
-    if (this.keys['Space'] && this.isGrounded && !this.isScoped) {
+    const wantsJump = this.keys['Space'] && !this._wasJumpKey;
+    this._wasJumpKey = this.keys['Space'];
+    if (wantsJump && this.isGrounded && !this.isScoped && !this.isCrouching && !this.planting) {
       this.velocity.y = JUMP_FORCE;
       this.isGrounded = false;
     }
 
     this.velocity.y -= GRAVITY * dt;
     this.position.y += this.velocity.y * dt;
-    if (this.position.y <= PLAYER_HEIGHT) {
-      this.position.y = this.isCrouching ? PLAYER_CROUCH_HEIGHT : PLAYER_HEIGHT;
+
+    const groundHeight = this.isCrouching ? PLAYER_CROUCH_HEIGHT : PLAYER_HEIGHT;
+    if (this.position.y <= groundHeight) {
+      this.position.y = groundHeight;
       this.velocity.y = 0;
       this.isGrounded = true;
+    } else {
+      this.isGrounded = false;
     }
 
     this.position = resolveCollision(this.position, this.colliders);
@@ -432,7 +442,7 @@ export class Player {
   }
 }
 
-export function raycastHit(origin, direction, targets, maxDist = 150, blockers = []) {
+export function raycastHit(origin, direction, targets, maxDist = 150, wallMeshes = []) {
   const dir = direction.clone().normalize();
   const raycaster = new THREE.Raycaster(origin, dir, 0.05, maxDist);
   raycaster.camera = null;
@@ -440,30 +450,38 @@ export function raycastHit(origin, direction, targets, maxDist = 150, blockers =
   for (const t of targets) {
     if (t.alive && t.mesh) t.mesh.updateMatrixWorld(true);
   }
-  for (const mesh of blockers) {
+  for (const mesh of wallMeshes) {
     mesh.updateMatrixWorld?.(true);
   }
 
-  const botMeshes = targets.filter(t => t.alive && t.mesh).map(t => t.mesh);
-  const allMeshes = blockers.length ? [...blockers, ...botMeshes] : botMeshes;
-  if (allMeshes.length === 0) return null;
+  // Closest wall blocks the shot
+  let wallDist = maxDist + 1;
+  if (wallMeshes.length > 0) {
+    const wallHits = raycaster.intersectObjects(wallMeshes, false);
+    if (wallHits.length > 0) wallDist = wallHits[0].distance;
+  }
 
-  const hits = raycaster.intersectObjects(allMeshes, true);
-  if (hits.length === 0) return null;
+  const botRoots = targets.filter(t => t.alive && t.mesh).map(t => t.mesh);
+  if (botRoots.length === 0) return null;
 
-  for (const hit of hits) {
+  const botHits = raycaster.intersectObjects(botRoots, true);
+  for (const hit of botHits) {
+    if (hit.distance >= wallDist) continue;
+
     let obj = hit.object;
+    let hitZone = hit.object.userData?.hitZone;
     while (obj) {
       const bot = obj.userData?.bot;
       if (bot?.alive) {
-        let hitZone = hit.object.userData?.hitZone ?? 'body';
-        if (!hit.object.userData?.hitZone) {
-          const bodyY = bot.mesh.position.y;
-          if (hit.point.y >= bodyY + 1.45) hitZone = 'head';
-          else if (hit.point.y <= bodyY + 0.25) hitZone = 'leg';
+        if (!hitZone) {
+          const rootY = bot.mesh.position.y;
+          if (hit.point.y >= rootY + 1.45) hitZone = 'head';
+          else if (hit.point.y <= rootY + 0.15) hitZone = 'leg';
+          else hitZone = 'body';
         }
         return { target: bot, hit, hitZone, distance: hit.distance };
       }
+      if (!hitZone && obj.userData?.hitZone) hitZone = obj.userData.hitZone;
       obj = obj.parent;
     }
   }
