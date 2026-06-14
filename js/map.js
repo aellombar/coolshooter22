@@ -82,6 +82,14 @@ export function buildMap(scene) {
     wall(w, h, d, x, 0, z, mats.crate);
   }
 
+  function cover(w, h, d, x, z, m = mats.crate) {
+    wall(w, h, d, x, 0, z, m);
+  }
+
+  function halfWall(w, h, d, x, y, z, m = mats.wall) {
+    wall(w, h, d, x, y, z, m);
+  }
+
   // ── Ground & bounds ──
   floor(100, 100, 0, 0, floorMats.floor);
   wall(100, 6, 1, 0, 0, 50, mats.wall);   // south
@@ -107,11 +115,13 @@ export function buildMap(scene) {
 
   // ── ATTACKER SPAWN (south) ──
   floor(20, 12, 0, 34, floorMats.spawn);
-  wall(20, 4, 0.5, 0, 0, 40.5, mats.wallA); // back
+  floor(8, 8, 0, 34, brightMat(0x2a9d8f)); // buy zone marker
+  wall(20, 4, 0.5, 0, 0, 40.5, mats.wallA);
   wall(0.5, 4, 12, -10, 0, 34, mats.wallA);
   wall(0.5, 4, 12, 10, 0, 34, mats.wallA);
-  // open north → corridor
-  label(scene, mapObjects, 'ATTACKER SPAWN', 0, 4, 34, '#0fb5ae');
+  cover(2, 1.2, 1, -4, 36, mats.box);
+  cover(2, 1.2, 1, 4, 36, mats.box);
+  label(scene, mapObjects, 'ATTACKER SPAWN · BUY ZONE', 0, 4, 34, '#0fb5ae');
 
   // ── SPAWN → MID corridor (6 units wide) ──
   floor(6, 22, 0, 17, floorMats.spawn);
@@ -120,12 +130,19 @@ export function buildMap(scene) {
 
   // ── MID (open 26 × 18) ──
   floor(26, 18, 0, -2, floorMats.mid);
-  // partial south cover wall with gap (corridor connects)
   wall(8, 3, 0.5, -7, 0, 7, mats.wall);
   wall(8, 3, 0.5, 7, 0, 7, mats.wall);
+  // Mid cubbies (Valorant-style cover)
+  halfWall(3, 2.5, 0.4, -9, 0, -2, mats.wall);
+  halfWall(3, 2.5, 0.4, 9, 0, -2, mats.wall);
+  halfWall(0.4, 2.5, 3, -11, 0, -5, mats.wall);
+  halfWall(0.4, 2.5, 3, 11, 0, -5, mats.wall);
   crate(3, 1.3, 1.2, -5, -2);
   crate(3, 1.3, 1.2, 5, -2);
   crate(1.2, 1.3, 3, 0, -6);
+  crate(2.5, 1.5, 1.5, -3, 2);
+  crate(2.5, 1.5, 1.5, 3, 2);
+  cover(4, 0.3, 4, 0, -2, brightMat(0xd4a843)); // mid control pad
   label(scene, mapObjects, 'MID', 0, 5, -2, '#ffc940');
 
   // ── A MAIN: mid west exit → site A (corridor 6 wide) ──
@@ -139,6 +156,9 @@ export function buildMap(scene) {
   wall(0.5, 4, 5, -13, 0, 4, mats.wall);
   wall(0.5, 4, 5, -13, 0, -8, mats.wall);
   crate(2, 1.3, 1.5, -22, -6);
+  crate(2, 1.3, 1.5, -18, -10);
+  cover(2, 2, 1.2, -20, -4, mats.box);
+  cover(1.5, 1.5, 1.5, -14, -6, mats.crate);
   label(scene, mapObjects, 'A MAIN', -22, 4, -8, '#0fb5ae');
 
   // ── A SHORT: mid northwest → site A east door ──
@@ -148,6 +168,8 @@ export function buildMap(scene) {
   wall(0.5, 4, 6, -11, 0, -12, mats.wall);
   wall(10, 4, 0.5, -6, 0, -15.5, mats.wall);
   wall(0.5, 4, 10, -19, 0, -20, mats.wall);
+  cover(1.5, 1.2, 1.5, -8, -14, mats.crate);
+  cover(1.5, 1.2, 1.5, -12, -18, mats.crate);
   label(scene, mapObjects, 'A SHORT', -10, 4, -16, '#6ecf9a');
 
   // ── SITE A (room 16×14) — doors south (A Main) + east (A Short) ──
@@ -161,7 +183,12 @@ export function buildMap(scene) {
   wall(4, 5, 0.5, -31, 0, -17.5, mats.wallA);
   wall(4, 5, 0.5, -21, 0, -17.5, mats.wallA);
   wall(2.5, 2.2, 2.5, -29, 0, -26, mats.box);
+  wall(3, 1.8, 3, -23, 0, -28, mats.box); // default plant box
   crate(2, 1.3, 1.5, -23, -22);
+  crate(2, 1.3, 1.5, -29, -20);
+  halfWall(0.4, 3, 4, -30, 0, -24, mats.wallA);
+  halfWall(0.4, 3, 4, -22, 0, -24, mats.wallA);
+  cover(4, 0.25, 4, -26, -24, brightMat(0x0fb5ae));
   siteLabel(scene, mapObjects, 'A', -26, 4, -24);
   label(scene, mapObjects, 'SITE A', -26, 3, -20, '#0fb5ae');
 
@@ -180,6 +207,9 @@ export function buildMap(scene) {
   wall(0.5, 4, 5, 13, 0, 4, mats.wall);
   wall(0.5, 4, 5, 13, 0, -8, mats.wall);
   crate(2, 1.3, 1.5, 22, -6);
+  crate(2, 1.3, 1.5, 18, -10);
+  cover(2, 2, 1.2, 20, -4, mats.box);
+  cover(1.5, 1.5, 1.5, 14, -6, mats.crate);
   label(scene, mapObjects, 'B MAIN', 22, 4, -8, '#ff4655');
 
   // ── B SHORT: mid northeast → site B west door ──
@@ -189,6 +219,8 @@ export function buildMap(scene) {
   wall(0.5, 4, 6, 11, 0, -12, mats.wall);
   wall(10, 4, 0.5, 6, 0, -15.5, mats.wall);
   wall(0.5, 4, 10, 19, 0, -20, mats.wall);
+  cover(1.5, 1.2, 1.5, 8, -14, mats.crate);
+  cover(1.5, 1.2, 1.5, 12, -18, mats.crate);
   label(scene, mapObjects, 'B SHORT', 10, 4, -16, '#e0a060');
 
   // ── SITE B — doors south (B Main) + west (B Short) ──
@@ -200,7 +232,12 @@ export function buildMap(scene) {
   wall(4, 5, 0.5, 21, 0, -17.5, mats.wallB);
   wall(4, 5, 0.5, 31, 0, -17.5, mats.wallB);
   wall(2.5, 2.2, 2.5, 29, 0, -26, mats.box);
+  wall(3, 1.8, 3, 23, 0, -28, mats.box);
   crate(2, 1.3, 1.5, 23, -22);
+  crate(2, 1.3, 1.5, 29, -20);
+  halfWall(0.4, 3, 4, 30, 0, -24, mats.wallB);
+  halfWall(0.4, 3, 4, 22, 0, -24, mats.wallB);
+  cover(4, 0.25, 4, 26, -24, brightMat(0xff4655));
   siteLabel(scene, mapObjects, 'B', 26, 4, -24);
   label(scene, mapObjects, 'SITE B', 26, 3, -20, '#ff4655');
 

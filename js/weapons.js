@@ -321,6 +321,7 @@ export function createWeaponState(weaponId) {
     shotsFired: 0,
     lastShotTime: 0,
     isReloading: false,
+    reloadTimer: 0,
     burstRemaining: 0,
     burstCooldown: 0,
     boltPending: false,
@@ -453,6 +454,7 @@ export function reloadWeapon(weaponState) {
   weaponState.reserve -= available;
   weaponState.shotsFired = 0;
   weaponState.isReloading = false;
+  weaponState.reloadTimer = 0;
 }
 
 export function getReloadTime(weaponId) {

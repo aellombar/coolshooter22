@@ -3,7 +3,7 @@ import { buildMap } from './map.js';
 import { Player, raycastHit, raycastPlayer, createBulletTracer, createHitMarker } from './player.js';
 import { createBotTeam, addKillFeed } from './bots.js';
 import { applyValorantFov, horizontalToVerticalFov, VALORANT_H_FOV } from './settings.js';
-import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, openBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
+import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, openBuyMenu, initBuyMenu, updateBuyCredits, setBuyAllowed } from './buyMenu.js';
 import { getWeaponDamage } from './weapons.js';
 import { audio } from './audio.js';
 import { BulletDecalManager, raycastWallHit } from './bulletDecals.js';
@@ -109,8 +109,9 @@ export class Game {
     this.buyTimer = BUY_TIME;
     this.spikePlanted = false;
     if (this.buyBarrierMesh) this.buyBarrierMesh.visible = true;
+    setBuyAllowed(true);
     openBuyMenu(this.player);
-    this._showOverlay(`ROUND ${this.round} — BUY PHASE (${BUY_TIME}s)`, 3500);
+    this._showOverlay(`ROUND ${this.round} — BUY PHASE (${BUY_TIME}s) · Stay in spawn`, 3500);
   }
 
   _endBuyPhase() {
@@ -118,8 +119,20 @@ export class Game {
     this.roundPhase = 'combat';
     this.roundTimer = ROUND_TIME;
     if (this.buyBarrierMesh) this.buyBarrierMesh.visible = false;
+    setBuyAllowed(false);
     closeBuyMenu();
     this._showOverlay('FIGHT!', 1500);
+  }
+
+  canBuy() {
+    return this.roundPhase === 'buy' && this._isInBuyZone();
+  }
+
+  _isInBuyZone() {
+    if (!this.player || !this.spawnBounds) return false;
+    const p = this.player.position;
+    const b = this.spawnBounds;
+    return p.x >= b.minX && p.x <= b.maxX && p.z >= b.minZ && p.z <= b.maxZ;
   }
 
   _getActiveColliders() {
@@ -163,6 +176,7 @@ export class Game {
         movementLocked: false,
       });
       this._clampToSpawn();
+      setBuyAllowed(this.canBuy());
     }
 
     const livingBots = (this.bots ?? []).filter(b => b.alive);
@@ -260,10 +274,19 @@ export class Game {
   }
 
   _handlePurchase(purchase) {
+    if (!this.canBuy()) {
+      this._showOverlay('Buy only in spawn during buy phase', 2000);
+      return;
+    }
     if (purchase.type === 'weapon') {
       if (this.player.buyWeapon(purchase.id)) updateBuyCredits(this.player.credits);
     } else if (purchase.type === 'armor') {
       if (this.player.buyArmor(purchase.id)) updateBuyCredits(this.player.credits);
+    } else if (purchase.type === 'sell') {
+      if (this.player.sellWeapon(purchase.slot)) {
+        updateBuyCredits(this.player.credits);
+        this._showOverlay('Weapon sold', 1200);
+      }
     }
   }
 
@@ -338,9 +361,11 @@ export class Game {
       return;
     }
     if (code === 'KeyB') {
-      if (this.roundPhase === 'buy' || this.roundPhase === 'combat') {
-        toggleBuyMenu(this.player);
+      if (!this.canBuy()) {
+        this._showOverlay('Buy only in spawn during buy phase', 2000);
+        return;
       }
+      toggleBuyMenu(this.player);
     }
     if (code === 'Escape') {
       if (isBuyMenuOpen()) closeBuyMenu();

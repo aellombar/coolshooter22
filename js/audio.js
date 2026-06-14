@@ -107,6 +107,28 @@ class AudioManager {
     this._tone(80, 0.15, 0.25, 'sawtooth');
     this._tone(40, 0.2, 0.15, 'square');
   }
+
+  /** Valorant-style reload audio by weapon class. */
+  playReload(weaponId) {
+    this.unlock();
+    if (!this.ctx) return;
+    const cat = this._category(weaponId);
+    const dur = cat === 'sniper' ? 0.38 : cat === 'rifle' ? 0.3 : 0.24;
+    // Mag release + slide pull
+    this._noise(0.1, 0.18, 320);
+    this._tone(cat === 'pistol' ? 320 : 200, dur * 0.45, 0.14, 'square');
+    // Mag insert + chamber
+    setTimeout(() => {
+      this._noise(0.08, 0.16, 520);
+      this._tone(140, 0.1, 0.12, 'sine');
+      this._tone(90, 0.06, 0.1, 'triangle');
+    }, dur * 420);
+    // Final click
+    setTimeout(() => {
+      this._noise(0.05, 0.08, 900);
+      this._tone(220, 0.04, 0.1, 'square');
+    }, dur * 850);
+  }
 }
 
 export const audio = new AudioManager();

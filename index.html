@@ -97,6 +97,7 @@
         <div class="weapon-info">
           <span id="weapon-name">Classic</span>
           <span id="ammo-count">12 / 36</span>
+          <span id="reload-indicator" class="reload-indicator hidden">RELOADING</span>
         </div>
         <div class="health-bar">
           <div class="health-fill" id="health-fill"></div>
@@ -129,6 +130,11 @@
           <div class="buy-slot"><span class="slot-key">2</span> Secondary: <strong id="slot-secondary">Classic</strong></div>
           <div class="buy-slot">Shields: <strong id="slot-armor">None</strong></div>
         </div>
+        <div class="buy-sell-row">
+          <button type="button" class="sell-btn" id="btn-sell-primary">Sell Primary</button>
+          <button type="button" class="sell-btn" id="btn-sell-secondary">Sell Secondary</button>
+        </div>
+        <p id="buy-zone-notice" class="buy-zone-notice hidden">Return to attacker spawn to buy or sell.</p>
         <div id="buy-sections" class="buy-sections"></div>
       </div>
     </div>

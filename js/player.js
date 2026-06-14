@@ -217,6 +217,7 @@ export class Player {
 
   equipPrimary() {
     if (!this.primaryWeapon) return;
+    this.cancelReload();
     this.activeSlot = 'primary';
     this.primaryWeapon.shotsFired = 0;
     this.isScoped = false;
@@ -226,6 +227,7 @@ export class Player {
   }
 
   equipSecondary() {
+    this.cancelReload();
     this.activeSlot = 'secondary';
     this.secondaryWeapon.shotsFired = 0;
     this.isScoped = false;
@@ -244,13 +246,66 @@ export class Player {
 
   startReload() {
     const w = this.weapon;
-    if (w.isReloading || w.ammo === w.def.magSize) return;
-    if (w.reserve <= 0) return;
+    if (w.isReloading || w.ammo >= w.def.magSize || w.reserve <= 0) return;
     w.isReloading = true;
-    const reloadTime = getReloadTime(w.def.id);
-    setTimeout(() => {
-      if (this.alive) reloadWeapon(w);
-    }, reloadTime * 1000);
+    w.reloadTimer = getReloadTime(w.def.id);
+    w.shotsFired = 0;
+    audio.playReload(w.def.id);
+    this._updateReloadUI(true);
+  }
+
+  cancelReload() {
+    const w = this.weapon;
+    if (!w.isReloading) return;
+    w.isReloading = false;
+    w.reloadTimer = 0;
+    this._updateReloadUI(false);
+  }
+
+  _updateReload(dt) {
+    const w = this.weapon;
+    if (!w.isReloading || w.reloadTimer <= 0) return;
+    w.reloadTimer -= dt;
+    if (w.reloadTimer <= 0) {
+      reloadWeapon(w);
+      this._updateReloadUI(false);
+      this._updateHUDAmmo();
+    }
+  }
+
+  _updateReloadUI(reloading) {
+    const el = document.getElementById('reload-indicator');
+    if (el) el.classList.toggle('hidden', !reloading);
+  }
+
+  _updateHUDAmmo() {
+    const w = this.weapon;
+    const ammoEl = document.getElementById('ammo-count');
+    if (ammoEl) ammoEl.textContent = `${w.ammo} / ${w.reserve}`;
+  }
+
+  sellWeapon(slot) {
+    if (slot === 'primary') {
+      if (!this.primaryWeapon) return false;
+      this.credits += this.primaryWeapon.def.price;
+      this.primaryWeapon = null;
+      if (this.activeSlot === 'primary') this.equipSecondary();
+      return true;
+    }
+    if (slot === 'secondary') {
+      if (this.secondaryWeapon.def.id === 'classic') return false;
+      this.credits += this.secondaryWeapon.def.price;
+      this.secondaryWeapon = createWeaponState('classic');
+      if (this.activeSlot === 'secondary') this.viewModel.setWeapon('classic');
+      return true;
+    }
+    return false;
+  }
+
+  sellActiveWeapon() {
+    return this.activeSlot === 'primary'
+      ? this.sellWeapon('primary')
+      : this.sellWeapon('secondary');
   }
 
   takeDamage(amount, hitZone = 'body') {
@@ -372,10 +427,12 @@ export class Player {
     }
 
     this._updatePlanting(dt, plantSites);
+    this._updateReload(dt);
   }
 
   _fire(now) {
     const w = this.weapon;
+    if (w.isReloading) this.cancelReload();
     fireWeapon(w, now);
     audio.playGunshot(w.def.id);
     this.viewModel.onFire();
@@ -513,45 +570,33 @@ export function raycastHit(origin, direction, targets, maxDist = 150, wallMeshes
   const dir = direction.clone().normalize();
   const raycaster = new THREE.Raycaster(origin, dir, 0, maxDist);
   raycaster.camera = null;
-  raycaster.far = maxDist;
 
+  const meshes = [];
   for (const t of targets) {
-    if (t.alive && t.mesh) t.mesh.updateMatrixWorld(true);
+    if (!t.alive) continue;
+    if (t.hitMeshes?.length) meshes.push(...t.hitMeshes);
+    else if (t.mesh) meshes.push(t.mesh);
   }
+  if (meshes.length === 0) return null;
 
-  const botRoots = targets.filter(t => t.alive && t.mesh).map(t => t.mesh);
-  if (botRoots.length === 0) return null;
+  for (const m of meshes) m.updateMatrixWorld(true);
 
-  const botHits = raycaster.intersectObjects(botRoots, true);
-  if (botHits.length === 0) return null;
+  const hits = raycaster.intersectObjects(meshes, false);
+  hits.sort((a, b) => a.distance - b.distance);
 
-  for (const hit of botHits) {
-    // Check wall occlusion up to this hit
+  for (const hit of hits) {
     if (wallMeshes.length > 0) {
-      for (const mesh of wallMeshes) mesh.updateMatrixWorld?.(true);
-      const wallRay = new THREE.Raycaster(origin, dir, 0, hit.distance - 0.02);
+      for (const wm of wallMeshes) wm.updateMatrixWorld?.(true);
+      const wallRay = new THREE.Raycaster(origin, dir, 0, hit.distance - 0.01);
       wallRay.camera = null;
-      const wallHits = wallRay.intersectObjects(wallMeshes, false);
-      if (wallHits.length > 0) continue;
+      if (wallRay.intersectObjects(wallMeshes, false).length > 0) continue;
     }
 
-    let obj = hit.object;
-    let hitZone = hit.object.userData?.hitZone;
-    while (obj) {
-      const bot = obj.userData?.bot;
-      if (bot?.alive) {
-        if (!hitZone || hitZone === 'body') {
-          const rootY = bot.mesh.position.y;
-          const relY = hit.point.y - rootY;
-          if (relY >= 1.35) hitZone = 'head';
-          else if (relY <= 0.05) hitZone = 'leg';
-          else hitZone = 'body';
-        }
-        return { target: bot, hit, hitZone, distance: hit.distance };
-      }
-      if (!hitZone && obj.userData?.hitZone) hitZone = obj.userData.hitZone;
-      obj = obj.parent;
-    }
+    const bot = hit.object.userData?.bot;
+    if (!bot?.alive) continue;
+
+    const hitZone = hit.object.userData?.hitZone ?? 'body';
+    return { target: bot, hit, hitZone, distance: hit.distance };
   }
   return null;
 }

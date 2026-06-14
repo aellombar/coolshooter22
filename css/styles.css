@@ -421,6 +421,24 @@ input[type="range"] {
   margin-right: 1rem;
 }
 
+.reload-indicator {
+  display: inline-block;
+  margin-left: 0.75rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: var(--valorant-gold);
+  animation: reload-pulse 0.8s ease-in-out infinite;
+}
+
+.reload-indicator.hidden {
+  display: none;
+}
+
+@keyframes reload-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
 .health-bar {
   width: 200px;
   height: 8px;
@@ -618,6 +636,48 @@ input[type="range"] {
   border-radius: 2px;
   font-size: 0.7rem;
   margin-right: 0.35rem;
+}
+
+.buy-sell-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.sell-btn {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(255, 70, 85, 0.12);
+  border: 1px solid rgba(255, 70, 85, 0.45);
+  color: var(--valorant-red);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.sell-btn:hover:not(:disabled) {
+  background: rgba(255, 70, 85, 0.22);
+}
+
+.sell-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.buy-zone-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--valorant-gold);
+  background: rgba(255, 200, 64, 0.08);
+  border: 1px solid rgba(255, 200, 64, 0.25);
+}
+
+.buy-zone-notice.hidden {
+  display: none;
 }
 
 .buy-sections {
