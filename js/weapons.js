@@ -74,6 +74,9 @@ export const WEAPONS = {
     automatic: false,
     runSpeed: 5.73,
     equipTime: 0.75,
+    inaccuracyStanding: 0.3,
+    inaccuracyMoving: 2.0,
+    inaccuracyAir: 5.0,
     firstShotAccuracy: 0.005,
     recoilPattern: null,
     recoilRecovery: 0.35,
@@ -92,6 +95,9 @@ export const WEAPONS = {
     runSpeed: 5.73,
     equipTime: 0.75,
     firstShotAccuracy: 0.003,
+    inaccuracyStanding: 0.25,
+    inaccuracyMoving: 1.8,
+    inaccuracyAir: 4.5,
     recoilPattern: null,
     recoilRecovery: 0.30,
     range: 30,
@@ -109,6 +115,9 @@ export const WEAPONS = {
     runSpeed: 5.4,
     equipTime: 1.0,
     firstShotAccuracy: 0.002,
+    inaccuracyStanding: 0.2,
+    inaccuracyMoving: 2.5,
+    inaccuracyAir: 5.5,
     recoilPattern: null,
     recoilRecovery: 0.50,
     range: 50,
@@ -126,6 +135,9 @@ export const WEAPONS = {
     runSpeed: 5.73,
     equipTime: 0.75,
     firstShotAccuracy: 0.012,
+    inaccuracyStanding: 0.35,
+    inaccuracyMoving: 3.5,
+    inaccuracyAir: 7.0,
     recoilPattern: STINGER_PATTERN,
     recoilRecovery: 0.20,
     range: 20,
@@ -143,6 +155,9 @@ export const WEAPONS = {
     runSpeed: 5.73,
     equipTime: 0.75,
     firstShotAccuracy: 0.015,
+    inaccuracyStanding: 0.3,
+    inaccuracyMoving: 3.2,
+    inaccuracyAir: 6.8,
     recoilPattern: SPECTRE_PATTERN,
     recoilRecovery: 0.18,
     range: 22,
@@ -161,6 +176,9 @@ export const WEAPONS = {
     runSpeed: 5.4,
     equipTime: 1.0,
     firstShotAccuracy: 0.008,
+    inaccuracyStanding: 0.22,
+    inaccuracyMoving: 3.0,
+    inaccuracyAir: 6.5,
     recoilPattern: BULLDOG_PATTERN,
     recoilRecovery: 0.25,
     range: 50,
@@ -178,10 +196,14 @@ export const WEAPONS = {
     runSpeed: 5.4,
     equipTime: 1.0,
     firstShotAccuracy: 0.002,
+    inaccuracyStanding: 0.15,
+    inaccuracyMoving: 2.8,
+    inaccuracyAir: 6.0,
     recoilPattern: GUARDIAN_PATTERN,
     recoilRecovery: 0.30,
     range: 50,
     scope: true,
+    scopeHFov: 55,
   },
   vandal: {
     id: 'vandal',
@@ -196,6 +218,9 @@ export const WEAPONS = {
     runSpeed: 5.4,
     equipTime: 1.0,
     firstShotAccuracy: 0.008,
+    inaccuracyStanding: 0.2,
+    inaccuracyMoving: 3.2,
+    inaccuracyAir: 6.5,
     recoilPattern: VANDAL_PATTERN,
     recoilRecovery: 0.22,
     range: 50,
@@ -213,6 +238,9 @@ export const WEAPONS = {
     runSpeed: 5.4,
     equipTime: 1.0,
     firstShotAccuracy: 0.008,
+    inaccuracyStanding: 0.25,
+    inaccuracyMoving: 3.0,
+    inaccuracyAir: 6.5,
     recoilPattern: PHANTOM_PATTERN,
     recoilRecovery: 0.20,
     range: 30,
@@ -235,6 +263,11 @@ export const WEAPONS = {
     recoilRecovery: 0.60,
     range: 50,
     scope: true,
+    scopeHFov: 40,
+    scopeAccuracyMul: 0.1,
+    inaccuracyStanding: 0.15,
+    inaccuracyMoving: 3.5,
+    inaccuracyAir: 7.0,
   },
   operator: {
     id: 'operator',
@@ -253,6 +286,11 @@ export const WEAPONS = {
     recoilRecovery: 0.80,
     range: 50,
     scope: true,
+    scopeHFov: 25,
+    scopeAccuracyMul: 0.06,
+    inaccuracyStanding: 0.08,
+    inaccuracyMoving: 4.5,
+    inaccuracyAir: 8.0,
     boltAction: true,
   },
 };
@@ -283,6 +321,7 @@ export function createWeaponState(weaponId) {
     shotsFired: 0,
     lastShotTime: 0,
     isReloading: false,
+    reloadTimer: 0,
     burstRemaining: 0,
     burstCooldown: 0,
     boltPending: false,
@@ -290,10 +329,9 @@ export function createWeaponState(weaponId) {
 }
 
 /**
- * Get recoil offset for current shot in spray.
- * Returns { pitch, yaw } in radians to apply to view and bullet direction.
+ * View kick applied to camera after each shot.
  */
-export function getRecoilOffset(weaponState, moving, airborne) {
+export function getViewKick(weaponState) {
   const { def, shotsFired } = weaponState;
   let pitch = 0;
   let yaw = 0;
@@ -304,23 +342,76 @@ export function getRecoilOffset(weaponState, moving, airborne) {
     pitch = v * (Math.PI / 180);
     yaw = h * (Math.PI / 180);
   } else if (!def.recoilPattern && shotsFired > 0) {
-    pitch = 0.02 * (Math.PI / 180) * shotsFired;
+    pitch = 0.15 * (Math.PI / 180);
   }
 
-  // Movement inaccuracy multiplier
-  let inaccuracy = def.firstShotAccuracy;
-  if (moving) inaccuracy *= 3.5;
-  if (airborne) inaccuracy *= 5;
+  return { pitch: pitch * 0.9, yaw: yaw * 0.9 };
+}
 
-  // Add random spread within inaccuracy cone
-  const spreadYaw = (Math.random() - 0.5) * inaccuracy * 2;
-  const spreadPitch = (Math.random() - 0.5) * inaccuracy * 2;
+/**
+ * Bullet spread in radians — Valorant-style movement bloom.
+ * Values in degrees internally for readable tuning.
+ */
+export function getBulletSpread(weaponState, moving, airborne, scoped, crouching = false) {
+  const { def, shotsFired } = weaponState;
+
+  // Base inaccuracy cone (degrees)
+  let spreadDeg = def.inaccuracyStanding ?? 0.25;
+
+  // First shot while perfectly still is near-perfect (Valorant tap accuracy)
+  if (shotsFired <= 1 && !moving && !airborne) {
+    spreadDeg = (def.firstShotAccuracy ?? 0.008) * 40;
+  }
+
+  if (crouching) spreadDeg *= 0.6;
+  if (moving) spreadDeg += def.inaccuracyMoving ?? 2.8;
+  if (airborne) spreadDeg += def.inaccuracyAir ?? 6.0;
+  if (scoped) spreadDeg *= def.scopeAccuracyMul ?? 0.12;
+
+  // Spray pattern offset (degrees) stacks after first bullet
+  let patternPitch = 0;
+  let patternYaw = 0;
+  if (def.recoilPattern && shotsFired > 1) {
+    const idx = Math.min(shotsFired - 2, def.recoilPattern.length - 1);
+    const [h, v] = def.recoilPattern[idx];
+    patternPitch = v * 0.75;
+    patternYaw = h * 0.75;
+  }
+
+  const spreadYaw = (Math.random() - 0.5) * spreadDeg * 2;
+  const spreadPitch = (Math.random() - 0.5) * spreadDeg * 2;
+  const DEG = Math.PI / 180;
 
   return {
-    pitch: pitch + spreadPitch,
-    yaw: yaw + spreadYaw,
-    viewKickPitch: pitch * 0.85,
-    viewKickYaw: yaw * 0.85,
+    pitch: (patternPitch + spreadPitch) * DEG,
+    yaw: (patternYaw + spreadYaw) * DEG,
+    spreadDeg, // for crosshair UI
+  };
+}
+
+/** Current aim inaccuracy for crosshair display (degrees). */
+export function getCurrentInaccuracy(weaponState, moving, airborne, scoped, crouching = false) {
+  const { def, shotsFired } = weaponState;
+  let spreadDeg = def.inaccuracyStanding ?? 0.25;
+  if (shotsFired <= 1 && !moving && !airborne) {
+    spreadDeg = (def.firstShotAccuracy ?? 0.008) * 40;
+  }
+  if (crouching) spreadDeg *= 0.6;
+  if (moving) spreadDeg += def.inaccuracyMoving ?? 2.8;
+  if (airborne) spreadDeg += def.inaccuracyAir ?? 6.0;
+  if (scoped) spreadDeg *= def.scopeAccuracyMul ?? 0.12;
+  return spreadDeg;
+}
+
+/** @deprecated use getViewKick + getBulletSpread */
+export function getRecoilOffset(weaponState, moving, airborne, scoped = false) {
+  const kick = getViewKick(weaponState);
+  const spread = getBulletSpread(weaponState, moving, airborne, scoped);
+  return {
+    pitch: spread.pitch,
+    yaw: spread.yaw,
+    viewKickPitch: kick.pitch,
+    viewKickYaw: kick.yaw,
   };
 }
 
@@ -363,6 +454,7 @@ export function reloadWeapon(weaponState) {
   weaponState.reserve -= available;
   weaponState.shotsFired = 0;
   weaponState.isReloading = false;
+  weaponState.reloadTimer = 0;
 }
 
 export function getReloadTime(weaponId) {
@@ -373,4 +465,27 @@ export function getReloadTime(weaponId) {
     marshal: 3.0, operator: 3.7,
   };
   return times[weaponId] || 2.0;
+}
+
+/** Valorant weapon damage for hit zone (values already tuned per zone). */
+export function getWeaponDamage(weaponDef, hitZone = 'body') {
+  if (hitZone === 'head') return weaponDef.damage.head;
+  if (hitZone === 'leg') return weaponDef.damage.leg;
+  return weaponDef.damage.body;
+}
+
+/**
+ * Apply Valorant-style armor absorption.
+ * @returns {{ healthDmg: number, armorUsed: number }}
+ */
+export function applyArmorDamage(rawDamage, armorHolder) {
+  let dmg = rawDamage;
+  let armorUsed = 0;
+  if (armorHolder.armor > 0) {
+    const absorbed = Math.min(armorHolder.armor, dmg * 0.66);
+    armorHolder.armor -= absorbed;
+    armorUsed = absorbed;
+    dmg -= absorbed * 0.66;
+  }
+  return { healthDmg: dmg, armorUsed };
 }

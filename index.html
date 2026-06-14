@@ -13,8 +13,8 @@
       <div class="menu-panel">
         <h1 class="game-title">TACTICAL SHOOTER</h1>
         <p class="subtitle">Valorant-style sensitivity &amp; gunplay</p>
-        <button class="menu-btn primary" id="btn-play">PLAY</button>
-        <button class="menu-btn" id="btn-settings">SETTINGS</button>
+        <button type="button" class="menu-btn primary" id="btn-play">PLAY</button>
+        <button type="button" class="menu-btn" id="btn-settings">SETTINGS</button>
       </div>
     </div>
 
@@ -26,12 +26,12 @@
           <div class="map-card selected" data-map="haven-lite">
             <div class="map-preview haven"></div>
             <h3>Haven Lite</h3>
-            <p>2 sites · 5v1 practice</p>
+            <p>Mid · A/B Main · A/B Short</p>
           </div>
         </div>
         <div class="menu-actions">
-          <button class="menu-btn" id="btn-back-main">BACK</button>
-          <button class="menu-btn primary" id="btn-start-game">START</button>
+          <button type="button" class="menu-btn" id="btn-back-main">BACK</button>
+          <button type="button" class="menu-btn primary" id="btn-start-game">START</button>
         </div>
       </div>
     </div>
@@ -41,22 +41,23 @@
       <div class="menu-panel">
         <h2>SETTINGS</h2>
         <div class="setting-row">
-          <label for="sens-slider">Mouse Sensitivity</label>
-          <span id="sens-value">0.50</span>
+          <label for="sens-input">Mouse Sensitivity</label>
         </div>
-        <input type="range" id="sens-slider" min="0.1" max="10" step="0.01" value="0.5">
-        <p class="setting-hint">Uses Valorant sensitivity formula (0.07° per count × sens)</p>
+        <div class="sens-controls">
+          <input type="range" id="sens-slider" min="0.001" max="10" step="0.001" value="0.5">
+          <input type="number" id="sens-input" min="0.001" max="10" step="0.001" value="0.500">
+        </div>
+        <p class="setting-hint">Valorant formula: 0.07° per count × sensitivity</p>
         <div class="setting-row">
-          <label for="fov-slider">Field of View</label>
-          <span id="fov-value">103</span>
+          <label>Field of View</label>
+          <span class="setting-fixed">103° (fixed, same as Valorant)</span>
         </div>
-        <input type="range" id="fov-slider" min="80" max="120" step="1" value="103">
         <div class="setting-row">
           <label for="invert-y">Invert Y-Axis</label>
           <input type="checkbox" id="invert-y">
         </div>
         <div class="menu-actions">
-          <button class="menu-btn" id="btn-back-settings">BACK</button>
+          <button type="button" class="menu-btn" id="btn-back-settings">BACK</button>
         </div>
       </div>
     </div>
@@ -66,7 +67,11 @@
       <div class="hud-top">
         <div class="score-bar">
           <span class="team-score attack">0</span>
-          <span class="round-info">ROUND <span id="round-num">1</span></span>
+          <div class="round-timer-block">
+            <span class="phase-label buy" id="phase-label">BUY PHASE</span>
+            <span class="round-timer" id="round-timer">0:30</span>
+          </div>
+          <span class="round-info">R<span id="round-num">1</span></span>
           <span class="team-score defend">0</span>
         </div>
         <div class="credits">₵ <span id="credits">800</span></div>
@@ -78,10 +83,21 @@
         <div class="ch-line right"></div>
         <div class="ch-dot"></div>
       </div>
+      <div id="scope-overlay" class="hidden">
+        <div class="scope-ring"></div>
+        <div class="scope-cross">
+          <div class="sc-line sc-top"></div>
+          <div class="sc-line sc-bottom"></div>
+          <div class="sc-line sc-left"></div>
+          <div class="sc-line sc-right"></div>
+        </div>
+        <div id="scope-hit" class="scope-hit-marker"></div>
+      </div>
       <div class="hud-bottom">
         <div class="weapon-info">
           <span id="weapon-name">Classic</span>
           <span id="ammo-count">12 / 36</span>
+          <span id="reload-indicator" class="reload-indicator hidden">RELOADING</span>
         </div>
         <div class="health-bar">
           <div class="health-fill" id="health-fill"></div>
@@ -89,33 +105,93 @@
         </div>
       </div>
       <div id="kill-feed"></div>
-      <div id="plant-prompt" class="hidden">Hold [4] to plant spike at Site <span id="site-label">A</span></div>
+      <div id="spike-hud" class="spike-hud">
+        <div class="spike-icon" aria-hidden="true"></div>
+        <span class="spike-label">SPIKE</span>
+      </div>
+      <div id="plant-prompt" class="hidden">
+        <span class="plant-text">Hold <kbd>4</kbd> to plant spike at Site <span id="site-label">A</span></span>
+        <div id="plant-bar" class="plant-bar"><div id="plant-fill" class="plant-fill"></div></div>
+      </div>
     </div>
 
     <!-- Buy Menu -->
     <div id="buy-menu" class="hidden">
       <div class="buy-panel">
-        <h2>BUY MENU <span class="buy-key">[B]</span></h2>
-        <div class="buy-categories">
-          <button class="buy-tab active" data-cat="sidearms">Sidearms</button>
-          <button class="buy-tab" data-cat="smgs">SMGs</button>
-          <button class="buy-tab" data-cat="rifles">Rifles</button>
-          <button class="buy-tab" data-cat="snipers">Snipers</button>
-          <button class="buy-tab" data-cat="armor">Armor</button>
+        <div class="buy-header">
+          <h2>BUY MENU</h2>
+          <div class="buy-meta">
+            <span class="buy-credits-display">₵ <span id="buy-credits">800</span></span>
+            <span class="buy-close-hint">[B] or [Esc] to close</span>
+          </div>
         </div>
-        <div class="buy-grid" id="buy-grid"></div>
-        <p class="buy-hint">Click to buy · Credits: ₵<span id="buy-credits">800</span></p>
+        <div class="buy-slots">
+          <div class="buy-slot"><span class="slot-key">1</span> Primary: <strong id="slot-primary">—</strong></div>
+          <div class="buy-slot"><span class="slot-key">2</span> Secondary: <strong id="slot-secondary">Classic</strong></div>
+          <div class="buy-slot">Shields: <strong id="slot-armor">None</strong></div>
+        </div>
+        <div class="buy-sell-row">
+          <button type="button" class="sell-btn" id="btn-sell-primary">Sell Primary</button>
+          <button type="button" class="sell-btn" id="btn-sell-secondary">Sell Secondary</button>
+        </div>
+        <p id="buy-zone-notice" class="buy-zone-notice hidden">Return to attacker spawn to buy or sell.</p>
+        <div id="buy-sections" class="buy-sections"></div>
       </div>
     </div>
 
-    <!-- Pause / Death overlay -->
     <div id="overlay-msg" class="hidden">
       <p id="overlay-text"></p>
     </div>
 
-    <!-- Game canvas -->
+    <!-- Tab scoreboard -->
+    <div id="scoreboard" class="hidden">
+      <div class="sb-panel">
+        <div class="sb-header">
+          <div class="sb-scoreline">
+            <span class="sb-team attack">ATK <strong id="sb-attack-score">0</strong></span>
+            <span class="sb-round">ROUND <span id="sb-round">1</span></span>
+            <span class="sb-team defend">DEF <strong id="sb-defend-score">0</strong></span>
+          </div>
+          <p class="sb-hint">Hold Tab · Match stats</p>
+        </div>
+        <div class="sb-summary">
+          <span>W <strong id="sb-wins">0</strong></span>
+          <span>L <strong id="sb-losses">0</strong></span>
+          <span>K <strong id="sb-player-k">0</strong></span>
+          <span>D <strong id="sb-player-d">0</strong></span>
+          <span>HS <strong id="sb-player-hs">0</strong></span>
+          <span>DMG <strong id="sb-player-dmg">0</strong></span>
+        </div>
+        <table class="sb-table">
+          <thead>
+            <tr>
+              <th>Agent</th><th>K</th><th>D</th><th>A</th><th>KDA</th><th>DMG</th><th>ACS</th>
+            </tr>
+          </thead>
+          <tbody id="sb-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
     <canvas id="game-canvas"></canvas>
   </div>
+
+  <!-- Instant menu fallback — works even if modules fail to load -->
+  <script>
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+      var el = document.getElementById(id);
+      if (el) el.classList.add('active');
+    }
+    document.getElementById('btn-play').addEventListener('click', function() { showScreen('map-select'); });
+    document.getElementById('btn-settings').addEventListener('click', function() { showScreen('settings-menu'); });
+    document.getElementById('btn-back-main').addEventListener('click', function() { showScreen('main-menu'); });
+    document.getElementById('btn-back-settings').addEventListener('click', function() { showScreen('main-menu'); });
+    document.getElementById('btn-start-game').addEventListener('click', function() {
+      if (window.__startGame) window.__startGame();
+    });
+    window.__showScreen = showScreen;
+  </script>
 
   <script type="importmap">
   {
