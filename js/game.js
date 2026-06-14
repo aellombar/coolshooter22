@@ -17,9 +17,10 @@ export class Game {
     this.roundTimer = 100;
     this.spikePlanted = false;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x8aa8c8, 1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -27,7 +28,7 @@ export class Game {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8aa8c8);
-    this.scene.fog = new THREE.Fog(0xa8c0d8, 45, 95);
+    this.scene.fog = new THREE.Fog(0xa8c0d8, 80, 140);
 
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
     applyValorantFov(this.camera);
@@ -39,6 +40,13 @@ export class Game {
   }
 
   start() {
+    this.running = false;
+
+    // Remove old player view-model from camera
+    if (this.player?.viewModel?.group) {
+      this.camera.remove(this.player.viewModel.group);
+    }
+
     while (this.scene.children.length) this.scene.remove(this.scene.children[0]);
 
     const mapData = buildMap(this.scene);
@@ -58,15 +66,19 @@ export class Game {
     this.player.spawn(this.spawnPoint);
     this.player.credits = 800;
 
+    // Camera must be in scene graph for rendering
+    this.scene.add(this.camera);
+
     this.bots = createBotTeam(this.scene, this.colliders, this.defenderSpawns);
 
     initBuyMenu((purchase) => this._handlePurchase(purchase));
 
-    this.running = true;
     this.roundPhase = 'buy';
     this.roundTimer = 100;
     this.spikePlanted = false;
     this.round = 1;
+    this._targetVFov = horizontalToVerticalFov(VALORANT_H_FOV, this.camera.aspect);
+    applyValorantFov(this.camera, this.camera.aspect);
 
     audio.unlock();
 
@@ -74,10 +86,13 @@ export class Game {
     this._showOverlay('ROUND 1 — BUY PHASE', 2500);
     setTimeout(() => { this.roundPhase = 'combat'; }, 3000);
 
-    if (!this._loopBound) {
-      this._loopBound = this._loop.bind(this);
-      requestAnimationFrame(this._loopBound);
-    }
+    this.running = true;
+    if (!this._loopBound) this._loopBound = this._loop.bind(this);
+    requestAnimationFrame(this._loopBound);
+
+    // Draw first frame immediately
+    this.camera.updateMatrixWorld(true);
+    this.renderer.render(this.scene, this.camera);
   }
 
   stop() {
@@ -96,23 +111,27 @@ export class Game {
       if (this.roundTimer <= 0) this._endRound('defenders');
     }
 
-    this.player.update(dt, this.plantSites);
+    if (this.player) {
+      this.player.update(dt, this.plantSites);
+    }
 
-    for (const bot of this.bots) {
+    for (const bot of this.bots ?? []) {
       const shot = bot.update(dt, this.player, this.colliders);
       if (shot) this._handleBotShot(shot);
     }
 
-    if (this.bots.every(b => !b.alive) && this.roundPhase === 'combat') {
+    if (this.bots?.every(b => !b.alive) && this.roundPhase === 'combat') {
       this._endRound('attackers');
     }
 
-    if (!this.player.alive && this.roundPhase === 'combat') {
+    if (this.player && !this.player.alive && this.roundPhase === 'combat') {
       this._endRound('defenders');
     }
 
     this._updateHUD();
     this._updateScopedFov(dt);
+
+    this.camera.updateMatrixWorld(true);
     this.renderer.render(this.scene, this.camera);
   }
 

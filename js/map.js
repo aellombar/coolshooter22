@@ -33,7 +33,14 @@ export function buildMap(scene) {
   };
 
   function mat(color, roughness = 0.85, emissive = 0x000000, emissiveInt = 0) {
-    return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05, emissive, emissiveIntensity: emissiveInt });
+    return new THREE.MeshStandardMaterial({
+      color, roughness, metalness: 0.05,
+      emissive, emissiveIntensity: emissiveInt,
+    });
+  }
+
+  function brightMat(color) {
+    return new THREE.MeshLambertMaterial({ color });
   }
 
   function wall(w, h, d, x, y, z, m) {
@@ -57,12 +64,23 @@ export function buildMap(scene) {
     mapObjects.push(mesh);
   }
 
+  // Use Lambert (lit, no PBR issues) for floors so they're always visible
+  const floorMats = {
+    floor: brightMat(0xbfc5d0),
+    spawn: brightMat(0x3dd6c8),
+    mid: brightMat(0xe8c07a),
+    aLane: brightMat(0x6ecf9a),
+    aSite: brightMat(0x2d9968),
+    bLane: brightMat(0xe0a060),
+    bSite: brightMat(0xd05040),
+  };
+
   function crate(w, h, d, x, z) {
     wall(w, h, d, x, 0, z, mats.crate);
   }
 
   // ── Ground & bounds ──
-  floor(100, 100, 0, 0, mats.floor);
+  floor(100, 100, 0, 0, floorMats.floor);
   wall(100, 6, 1, 0, 0, 50, mats.wall);   // south
   wall(100, 6, 1, 0, 0, -50, mats.wall);  // north
   wall(1, 6, 100, -50, 0, 0, mats.wall); // west
@@ -71,7 +89,7 @@ export function buildMap(scene) {
   const spawnPoint = new THREE.Vector3(0, 1.6, 34);
 
   // ── ATTACKER SPAWN (south) ──
-  floor(20, 12, 0, 34, mats.spawn);
+  floor(20, 12, 0, 34, floorMats.spawn);
   wall(20, 4, 0.5, 0, 0, 40.5, mats.wallA); // back
   wall(0.5, 4, 12, -10, 0, 34, mats.wallA);
   wall(0.5, 4, 12, 10, 0, 34, mats.wallA);
@@ -79,12 +97,12 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'ATTACKER SPAWN', 0, 4, 34, '#0fb5ae');
 
   // ── SPAWN → MID corridor (6 units wide) ──
-  floor(6, 22, 0, 17, mats.spawn);
+  floor(6, 22, 0, 17, floorMats.spawn);
   wall(0.5, 4, 22, -3.25, 0, 17, mats.wall);
   wall(0.5, 4, 22, 3.25, 0, 17, mats.wall);
 
   // ── MID (open 26 × 18) ──
-  floor(26, 18, 0, -2, mats.mid);
+  floor(26, 18, 0, -2, floorMats.mid);
   // partial south cover wall with gap (corridor connects)
   wall(8, 3, 0.5, -7, 0, 7, mats.wall);
   wall(8, 3, 0.5, 7, 0, 7, mats.wall);
@@ -94,8 +112,8 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'MID', 0, 5, -2, '#ffc940');
 
   // ── A MAIN: mid west exit → site A (corridor 6 wide) ──
-  floor(6, 14, -12, -2, mats.aLane);   // west from mid
-  floor(6, 16, -22, -14, mats.aLane);  // north to site
+  floor(6, 14, -12, -2, floorMats.aLane);
+  floor(6, 16, -22, -14, floorMats.aLane);
   wall(0.5, 4, 14, -15.25, 0, -2, mats.wall); // west outer
   wall(0.5, 4, 14, -8.75, 0, -2, mats.wall);  // east inner (mid side)
   wall(0.5, 4, 16, -25.25, 0, -14, mats.wall);
@@ -107,8 +125,8 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'A MAIN', -22, 4, -8, '#0fb5ae');
 
   // ── A SHORT: mid northwest → site A east door ──
-  floor(10, 6, -6, -12, mats.aLane);
-  floor(6, 10, -16, -20, mats.aLane);
+  floor(10, 6, -6, -12, floorMats.aLane);
+  floor(6, 10, -16, -20, floorMats.aLane);
   wall(0.5, 4, 6, -1, 0, -12, mats.wall);
   wall(0.5, 4, 6, -11, 0, -12, mats.wall);
   wall(10, 4, 0.5, -6, 0, -15.5, mats.wall);
@@ -116,7 +134,7 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'A SHORT', -10, 4, -16, '#6ecf9a');
 
   // ── SITE A (room 16×14) — doors south (A Main) + east (A Short) ──
-  floor(16, 14, -26, -24, mats.aSite);
+  floor(16, 14, -26, -24, floorMats.aSite);
   wall(16, 5, 0.5, -26, 0, -31.5, mats.wallA); // north back
   wall(0.5, 5, 14, -34.5, 0, -24, mats.wallA); // west
   // east wall — gap for A Short (z -20 to -28)
@@ -136,8 +154,8 @@ export function buildMap(scene) {
   };
 
   // ── B MAIN: mid east → site B ──
-  floor(6, 14, 12, -2, mats.bLane);
-  floor(6, 16, 22, -14, mats.bLane);
+  floor(6, 14, 12, -2, floorMats.bLane);
+  floor(6, 16, 22, -14, floorMats.bLane);
   wall(0.5, 4, 14, 15.25, 0, -2, mats.wall);
   wall(0.5, 4, 14, 8.75, 0, -2, mats.wall);
   wall(0.5, 4, 16, 25.25, 0, -14, mats.wall);
@@ -148,8 +166,8 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'B MAIN', 22, 4, -8, '#ff4655');
 
   // ── B SHORT: mid northeast → site B west door ──
-  floor(10, 6, 6, -12, mats.bLane);
-  floor(6, 10, 16, -20, mats.bLane);
+  floor(10, 6, 6, -12, floorMats.bLane);
+  floor(6, 10, 16, -20, floorMats.bLane);
   wall(0.5, 4, 6, 1, 0, -12, mats.wall);
   wall(0.5, 4, 6, 11, 0, -12, mats.wall);
   wall(10, 4, 0.5, 6, 0, -15.5, mats.wall);
@@ -157,7 +175,7 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'B SHORT', 10, 4, -16, '#e0a060');
 
   // ── SITE B — doors south (B Main) + west (B Short) ──
-  floor(16, 14, 26, -24, mats.bSite);
+  floor(16, 14, 26, -24, floorMats.bSite);
   wall(16, 5, 0.5, 26, 0, -31.5, mats.wallB);
   wall(0.5, 5, 14, 34.5, 0, -24, mats.wallB);
   wall(0.5, 5, 4, 17.5, 0, -19, mats.wallB);
@@ -170,18 +188,15 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'SITE B', 26, 3, -20, '#ff4655');
 
   // ── Defender spawn (north, between sites) ──
-  floor(30, 8, 0, -40, mats.floor);
+  floor(30, 8, 0, -40, floorMats.floor);
   wall(30, 4, 0.5, 0, 0, -44, mats.wall);
   label(scene, mapObjects, 'DEFENDERS', 0, 4, -40, '#ff4655');
 
-  // ── Lighting ──
-  scene.add(new THREE.HemisphereLight(0xd0e4ff, 0x909880, 0.75));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.45));
-  const sun = new THREE.DirectionalLight(0xfff8f0, 1.2);
+  // ── Lighting (strong so map is always visible) ──
+  scene.add(new THREE.HemisphereLight(0xd0e4ff, 0x808870, 1.0));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  const sun = new THREE.DirectionalLight(0xfff8f0, 1.4);
   sun.position.set(20, 50, 15);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.set(-50, 50, 50, -50, 1, 100);
   scene.add(sun);
 
   for (const [c, x, z] of [[0x0fb5ae, -26, -24], [0xff4655, 26, -24], [0xffc940, 0, -2]]) {

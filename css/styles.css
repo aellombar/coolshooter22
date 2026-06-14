@@ -34,8 +34,9 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
+  background: #8aa8c8;
 }
 
 #game-canvas.interactive {
