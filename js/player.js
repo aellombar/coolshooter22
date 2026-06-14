@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mouseDeltaToYaw, mouseDeltaToPitch } from './settings.js';
+import { mouseDeltaToYaw, mouseDeltaToPitch, getScopedSensMultiplier } from './settings.js';
 import {
   createWeaponState, canFire, fireWeapon, getViewKick, getBulletSpread,
   reloadWeapon, getReloadTime, getWeapon,
@@ -163,9 +163,10 @@ export class Player {
   }
 
   onMouseMove(deltaX, deltaY) {
-    const sensMul = this.isScoped ? 0.45 : 1;
-    this.yaw -= mouseDeltaToYaw(deltaX) * sensMul;
-    this.pitch -= mouseDeltaToPitch(deltaY) * sensMul;
+    const scoped = this.isScoped && this.weapon.def.scope;
+    const mul = getScopedSensMultiplier(scoped, this.weapon.def.id);
+    this.yaw -= mouseDeltaToYaw(deltaX, mul);
+    this.pitch -= mouseDeltaToPitch(deltaY, mul);
     const maxPitch = 89 * (Math.PI / 180);
     this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
   }

@@ -217,6 +217,7 @@ export class Game {
   }
 
   _updateHUD() {
+    if (!this.player) return;
     document.getElementById('round-num').textContent = this.round;
     document.getElementById('credits').textContent = this.player.credits;
     document.getElementById('weapon-name').textContent = this.player.weapon.def.name;
@@ -268,11 +269,15 @@ export function showHUD(show) {
   document.getElementById('hud').classList.toggle('hidden', !show);
 }
 
+export function setCanvasInteractive(on) {
+  document.getElementById('game-canvas')?.classList.toggle('interactive', on);
+}
+
 export function hideAllMenus() {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
 }
 
 export function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+  document.getElementById(id)?.classList.add('active');
 }

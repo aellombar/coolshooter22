@@ -1,248 +1,194 @@
 import * as THREE from 'three';
 
 /**
- * Haven Lite — Valorant-style map with structured lanes:
- *   Attacker Spawn → Mid → A Main / A Short → Site A
- *                      → B Main / B Short → Site B
+ * Haven Lite — clear Valorant-style callouts with walkable routes:
+ *
+ *   Attacker Spawn
+ *        |
+ *      Mid
+ *    /   |   \
+ * A Main  |  B Main
+ *    \    |    /
+ *   A Short B Short
+ *      \  |  /
+ *    Site A  Site B
  */
 export function buildMap(scene) {
   const mapObjects = [];
   const colliders = [];
 
-  // Zone palette (Valorant-inspired)
   const mats = {
-    floorDefault: mat(0xc8cdd8, 0.88),
-    floorSpawn: mat(0x2dd4bf, 0.75, 0x0fb5ae, 0.15),
-    floorMid: mat(0xd4a574, 0.8, 0xffc940, 0.08),
-    floorAMain: mat(0x7ec8a0, 0.78),
-    floorASite: mat(0x3d9970, 0.7, 0x0fb5ae, 0.12),
-    floorBMain: mat(0xc9956a, 0.78),
-    floorBSite: mat(0xc45c4a, 0.7, 0xff4655, 0.1),
-    wallConcrete: mat(0xa8b0bc, 0.82),
-    wallDark: mat(0x5a6270, 0.85),
-    wallAccent: mat(0xff4655, 0.55, 0xff4655, 0.25),
-    wallTeal: mat(0x0fb5ae, 0.6, 0x0fb5ae, 0.2),
-    wallGold: mat(0xffc940, 0.55, 0xffc940, 0.15),
-    crate: mat(0x8899aa, 0.9),
-    siteBox: mat(0xff4655, 0.5, 0xff4655, 0.35),
+    floor: mat(0xbfc5d0),
+    spawn: mat(0x3dd6c8, 0.7, 0x0fb5ae, 0.12),
+    mid: mat(0xe8c07a, 0.75, 0xffc940, 0.06),
+    aLane: mat(0x6ecf9a, 0.75),
+    aSite: mat(0x2d9968, 0.7, 0x0fb5ae, 0.1),
+    bLane: mat(0xe0a060, 0.75),
+    bSite: mat(0xd05040, 0.7, 0xff4655, 0.1),
+    wall: mat(0x98a2b0, 0.85),
+    wallA: mat(0x0fb5ae, 0.55, 0x0fb5ae, 0.15),
+    wallB: mat(0xff4655, 0.55, 0xff4655, 0.15),
+    crate: mat(0x788898, 0.9),
+    box: mat(0xff4655, 0.5, 0xff4655, 0.3),
   };
 
-  function mat(color, roughness, emissive = 0x000000, emissiveInt = 0) {
-    return new THREE.MeshStandardMaterial({
-      color, roughness, metalness: 0.05,
-      emissive, emissiveIntensity: emissiveInt,
+  function mat(color, roughness = 0.85, emissive = 0x000000, emissiveInt = 0) {
+    return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05, emissive, emissiveIntensity: emissiveInt });
+  }
+
+  function wall(w, h, d, x, y, z, m) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    mesh.position.set(x, y + h / 2, z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    scene.add(mesh);
+    mapObjects.push(mesh);
+    colliders.push({
+      min: { x: x - w / 2, y, z: z - d / 2 },
+      max: { x: x + w / 2, y: y + h, z: z + d / 2 },
     });
   }
 
-  function addBox(w, h, d, x, y, z, material, isCollider = true) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
-    mesh.position.set(x, y + h / 2, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    mapObjects.push(mesh);
-    if (isCollider) {
-      colliders.push({
-        min: { x: x - w / 2, y, z: z - d / 2 },
-        max: { x: x + w / 2, y: y + h, z: z + d / 2 },
-      });
-    }
-    return mesh;
-  }
-
-  function addFloor(w, d, x, z, material) {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), material);
+  function floor(w, d, x, z, m) {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d), m);
     mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x, 0.02, z);
+    mesh.position.set(x, 0.01, z);
     mesh.receiveShadow = true;
     scene.add(mesh);
     mapObjects.push(mesh);
   }
 
-  function addWall(w, h, d, x, z, material) {
-    return addBox(w, h, d, x, 0, z, material);
+  function crate(w, h, d, x, z) {
+    wall(w, h, d, x, 0, z, mats.crate);
   }
 
-  // ─── Base ground ───
-  const baseGround = new THREE.Mesh(
-    new THREE.PlaneGeometry(90, 90),
-    mats.floorDefault
-  );
-  baseGround.rotation.x = -Math.PI / 2;
-  baseGround.receiveShadow = true;
-  scene.add(baseGround);
-  mapObjects.push(baseGround);
+  // ── Ground & bounds ──
+  floor(100, 100, 0, 0, mats.floor);
+  wall(100, 6, 1, 0, 0, 50, mats.wall);   // south
+  wall(100, 6, 1, 0, 0, -50, mats.wall);  // north
+  wall(1, 6, 100, -50, 0, 0, mats.wall); // west
+  wall(1, 6, 100, 50, 0, 0, mats.wall);  // east
 
-  // Outer boundary
-  addWall(90, 6, 1, 0, -45, mats.wallDark);
-  addWall(90, 6, 1, 0, 45, mats.wallDark);
-  addWall(1, 6, 90, -45, 0, mats.wallDark);
-  addWall(1, 6, 90, 45, 0, mats.wallDark);
+  const spawnPoint = new THREE.Vector3(0, 1.6, 34);
 
-  // ─── ATTACKER SPAWN (south) ───
-  addFloor(16, 14, 0, 32, mats.floorSpawn);
-  addWall(16, 4, 0.5, 0, 39, mats.wallTeal);          // back wall
-  addWall(0.5, 4, 14, -8, 32, mats.wallTeal);          // west
-  addWall(0.5, 4, 14, 8, 32, mats.wallTeal);           // east
-  // north opening into spawn corridor (no wall)
+  // ── ATTACKER SPAWN (south) ──
+  floor(20, 12, 0, 34, mats.spawn);
+  wall(20, 4, 0.5, 0, 0, 40.5, mats.wallA); // back
+  wall(0.5, 4, 12, -10, 0, 34, mats.wallA);
+  wall(0.5, 4, 12, 10, 0, 34, mats.wallA);
+  // open north → corridor
+  label(scene, mapObjects, 'ATTACKER SPAWN', 0, 4, 34, '#0fb5ae');
 
-  createAreaLabel(scene, mapObjects, 'ATTACKER SPAWN', 0, 4, 32, '#0fb5ae');
+  // ── SPAWN → MID corridor (6 units wide) ──
+  floor(6, 22, 0, 17, mats.spawn);
+  wall(0.5, 4, 22, -3.25, 0, 17, mats.wall);
+  wall(0.5, 4, 22, 3.25, 0, 17, mats.wall);
 
-  // Spawn corridor → Mid
-  addFloor(8, 18, 0, 15, mats.floorSpawn);
-  addWall(0.5, 4, 18, -4.25, 15, mats.wallConcrete);   // west corridor wall
-  addWall(0.5, 4, 18, 4.25, 15, mats.wallConcrete);    // east corridor wall
+  // ── MID (open 26 × 18) ──
+  floor(26, 18, 0, -2, mats.mid);
+  // partial south cover wall with gap (corridor connects)
+  wall(8, 3, 0.5, -7, 0, 7, mats.wall);
+  wall(8, 3, 0.5, 7, 0, 7, mats.wall);
+  crate(3, 1.3, 1.2, -5, -2);
+  crate(3, 1.3, 1.2, 5, -2);
+  crate(1.2, 1.3, 3, 0, -6);
+  label(scene, mapObjects, 'MID', 0, 5, -2, '#ffc940');
 
-  const spawnPoint = new THREE.Vector3(0, 1.6, 30);
+  // ── A MAIN: mid west exit → site A (corridor 6 wide) ──
+  floor(6, 14, -12, -2, mats.aLane);   // west from mid
+  floor(6, 16, -22, -14, mats.aLane);  // north to site
+  wall(0.5, 4, 14, -15.25, 0, -2, mats.wall); // west outer
+  wall(0.5, 4, 14, -8.75, 0, -2, mats.wall);  // east inner (mid side)
+  wall(0.5, 4, 16, -25.25, 0, -14, mats.wall);
+  wall(0.5, 4, 16, -18.75, 0, -14, mats.wall);
+  // mid west wall with 6-unit door gap (already open between -3 and 3 at x=-13)
+  wall(0.5, 4, 5, -13, 0, 4, mats.wall);
+  wall(0.5, 4, 5, -13, 0, -8, mats.wall);
+  crate(2, 1.3, 1.5, -22, -6);
+  label(scene, mapObjects, 'A MAIN', -22, 4, -8, '#0fb5ae');
 
-  // ─── MID ───
-  addFloor(28, 22, 0, -2, mats.floorMid);
-  addWall(28, 4, 0.5, 0, 9, mats.wallGold);            // south partial wall (cover)
-  addWall(0.5, 4, 22, -14, -2, mats.wallConcrete);     // west mid wall
-  addWall(0.5, 4, 22, 14, -2, mats.wallConcrete);     // east mid wall
-  // Mid cover
-  addBox(3, 1.4, 1.2, -4, 0, -4, mats.crate);
-  addBox(3, 1.4, 1.2, 4, 0, -4, mats.crate);
-  addBox(1.2, 1.4, 3, 0, 0, -8, mats.crate);
-  addBox(2, 1.8, 2, -7, 0, 2, mats.wallDark);
-  addBox(2, 1.8, 2, 7, 0, 2, mats.wallDark);
+  // ── A SHORT: mid northwest → site A east door ──
+  floor(10, 6, -6, -12, mats.aLane);
+  floor(6, 10, -16, -20, mats.aLane);
+  wall(0.5, 4, 6, -1, 0, -12, mats.wall);
+  wall(0.5, 4, 6, -11, 0, -12, mats.wall);
+  wall(10, 4, 0.5, -6, 0, -15.5, mats.wall);
+  wall(0.5, 4, 10, -19, 0, -20, mats.wall);
+  label(scene, mapObjects, 'A SHORT', -10, 4, -16, '#6ecf9a');
 
-  createAreaLabel(scene, mapObjects, 'MID', 0, 5, -2, '#ffc940');
-
-  // Mid → A Main connector (west door gap)
-  addFloor(6, 8, -10, -2, mats.floorMid);
-  // gap in west wall at mid for A route
-  addWall(0.5, 4, 7, -14, -5.5, mats.wallConcrete);
-  addWall(0.5, 4, 7, -14, 1.5, mats.wallConcrete);
-
-  // Mid → B Main connector (east door gap)
-  addFloor(6, 8, 10, -2, mats.floorMid);
-  addWall(0.5, 4, 7, 14, -5.5, mats.wallConcrete);
-  addWall(0.5, 4, 7, 14, 1.5, mats.wallConcrete);
-
-  // ─── A MAIN (west lane) ───
-  addFloor(8, 28, -22, -10, mats.floorAMain);
-  addWall(0.5, 4, 28, -26, -10, mats.wallConcrete);    // outer west
-  addWall(0.5, 4, 28, -18, -10, mats.wallConcrete);    // inner east (with gap at site)
-  // door gap into A site
-  addWall(0.5, 4, 10, -18, -20, mats.wallConcrete);
-  addWall(0.5, 4, 8, -18, -6, mats.wallConcrete);
-  addBox(2.5, 1.5, 1.5, -22, 0, -14, mats.crate);
-  addBox(2.5, 1.5, 1.5, -22, 0, -6, mats.crate);
-
-  createAreaLabel(scene, mapObjects, 'A MAIN', -22, 4, -10, '#0fb5ae');
-
-  // ─── A SHORT (north-west flank) ───
-  addFloor(14, 8, -8, -18, mats.floorAMain);
-  addFloor(8, 10, -22, -22, mats.floorAMain);
-  addWall(0.5, 4, 8, -1, -18, mats.wallConcrete);      // separator with gap
-  addWall(14, 4, 0.5, -8, -22, mats.wallConcrete);
-  addWall(0.5, 4, 10, -15, -22, mats.wallConcrete);
-  addWall(0.5, 4, 10, -29, -22, mats.wallConcrete);
-  // A short entrance gap in site wall (east side)
-  addBox(2, 1.4, 2, -10, 0, -20, mats.crate);
-
-  createAreaLabel(scene, mapObjects, 'A SHORT', -14, 4, -20, '#7ec8a0');
-
-  // ─── SITE A (enclosed) ───
-  addFloor(16, 14, -30, -28, mats.floorASite);
-  addWall(16, 5, 0.5, -30, -35, mats.wallTeal);         // back
-  addWall(0.5, 5, 14, -38, -28, mats.wallTeal);        // west
-  addWall(0.5, 5, 14, -22, -28, mats.wallTeal);        // east (gaps for entries)
-  addWall(0.5, 5, 5, -22, -23, mats.wallTeal);         // east lower (A short gap)
-  addWall(0.5, 5, 5, -22, -33, mats.wallTeal);         // east upper
-  // A main entrance (south) — gap in south wall
-  addWall(5, 5, 0.5, -35, -21, mats.wallTeal);
-  addWall(5, 5, 0.5, -25, -21, mats.wallTeal);
-  // Site cover
-  addBox(2.5, 2.5, 2.5, -33, 0, -31, mats.siteBox);
-  addBox(3, 1.5, 1.5, -27, 0, -26, mats.crate);
-  addBox(1.5, 1.5, 3, -30, 0, -33, mats.crate);
-
-  createSiteLabel(scene, mapObjects, 'A', -30, 4.5, -28);
-  createAreaLabel(scene, mapObjects, 'SITE A', -30, 3, -24, '#0fb5ae');
+  // ── SITE A (room 16×14) — doors south (A Main) + east (A Short) ──
+  floor(16, 14, -26, -24, mats.aSite);
+  wall(16, 5, 0.5, -26, 0, -31.5, mats.wallA); // north back
+  wall(0.5, 5, 14, -34.5, 0, -24, mats.wallA); // west
+  // east wall — gap for A Short (z -20 to -28)
+  wall(0.5, 5, 4, -17.5, 0, -19, mats.wallA);
+  wall(0.5, 5, 6, -17.5, 0, -27, mats.wallA);
+  // south wall — 6-unit door for A Main (center x=-26)
+  wall(4, 5, 0.5, -31, 0, -17.5, mats.wallA);
+  wall(4, 5, 0.5, -21, 0, -17.5, mats.wallA);
+  wall(2.5, 2.2, 2.5, -29, 0, -26, mats.box);
+  crate(2, 1.3, 1.5, -23, -22);
+  siteLabel(scene, mapObjects, 'A', -26, 4, -24);
+  label(scene, mapObjects, 'SITE A', -26, 3, -20, '#0fb5ae');
 
   const plantSites = {
-    A: { center: new THREE.Vector3(-30, 0, -28), radius: 5.5, label: 'A' },
-    B: { center: new THREE.Vector3(30, 0, -28), radius: 5.5, label: 'B' },
+    A: { center: new THREE.Vector3(-26, 0, -24), radius: 6, label: 'A' },
+    B: { center: new THREE.Vector3(26, 0, -24), radius: 6, label: 'B' },
   };
 
-  // ─── B MAIN (east lane) ───
-  addFloor(8, 28, 22, -10, mats.floorBMain);
-  addWall(0.5, 4, 28, 26, -10, mats.wallConcrete);
-  addWall(0.5, 4, 28, 18, -10, mats.wallConcrete);
-  addWall(0.5, 4, 10, 18, -20, mats.wallConcrete);
-  addWall(0.5, 4, 8, 18, -6, mats.wallConcrete);
-  addBox(2.5, 1.5, 1.5, 22, 0, -14, mats.crate);
-  addBox(2.5, 1.5, 1.5, 22, 0, -6, mats.crate);
+  // ── B MAIN: mid east → site B ──
+  floor(6, 14, 12, -2, mats.bLane);
+  floor(6, 16, 22, -14, mats.bLane);
+  wall(0.5, 4, 14, 15.25, 0, -2, mats.wall);
+  wall(0.5, 4, 14, 8.75, 0, -2, mats.wall);
+  wall(0.5, 4, 16, 25.25, 0, -14, mats.wall);
+  wall(0.5, 4, 16, 18.75, 0, -14, mats.wall);
+  wall(0.5, 4, 5, 13, 0, 4, mats.wall);
+  wall(0.5, 4, 5, 13, 0, -8, mats.wall);
+  crate(2, 1.3, 1.5, 22, -6);
+  label(scene, mapObjects, 'B MAIN', 22, 4, -8, '#ff4655');
 
-  createAreaLabel(scene, mapObjects, 'B MAIN', 22, 4, -10, '#ff4655');
+  // ── B SHORT: mid northeast → site B west door ──
+  floor(10, 6, 6, -12, mats.bLane);
+  floor(6, 10, 16, -20, mats.bLane);
+  wall(0.5, 4, 6, 1, 0, -12, mats.wall);
+  wall(0.5, 4, 6, 11, 0, -12, mats.wall);
+  wall(10, 4, 0.5, 6, 0, -15.5, mats.wall);
+  wall(0.5, 4, 10, 19, 0, -20, mats.wall);
+  label(scene, mapObjects, 'B SHORT', 10, 4, -16, '#e0a060');
 
-  // ─── B SHORT (north-east flank) ───
-  addFloor(14, 8, 8, -18, mats.floorBMain);
-  addFloor(8, 10, 22, -22, mats.floorBMain);
-  addWall(0.5, 4, 8, 1, -18, mats.wallConcrete);
-  addWall(14, 4, 0.5, 8, -22, mats.wallConcrete);
-  addWall(0.5, 4, 10, 15, -22, mats.wallConcrete);
-  addWall(0.5, 4, 10, 29, -22, mats.wallConcrete);
-  addBox(2, 1.4, 2, 10, 0, -20, mats.crate);
+  // ── SITE B — doors south (B Main) + west (B Short) ──
+  floor(16, 14, 26, -24, mats.bSite);
+  wall(16, 5, 0.5, 26, 0, -31.5, mats.wallB);
+  wall(0.5, 5, 14, 34.5, 0, -24, mats.wallB);
+  wall(0.5, 5, 4, 17.5, 0, -19, mats.wallB);
+  wall(0.5, 5, 6, 17.5, 0, -27, mats.wallB);
+  wall(4, 5, 0.5, 21, 0, -17.5, mats.wallB);
+  wall(4, 5, 0.5, 31, 0, -17.5, mats.wallB);
+  wall(2.5, 2.2, 2.5, 29, 0, -26, mats.box);
+  crate(2, 1.3, 1.5, 23, -22);
+  siteLabel(scene, mapObjects, 'B', 26, 4, -24);
+  label(scene, mapObjects, 'SITE B', 26, 3, -20, '#ff4655');
 
-  createAreaLabel(scene, mapObjects, 'B SHORT', 14, 4, -20, '#c9956a');
+  // ── Defender spawn (north, between sites) ──
+  floor(30, 8, 0, -40, mats.floor);
+  wall(30, 4, 0.5, 0, 0, -44, mats.wall);
+  label(scene, mapObjects, 'DEFENDERS', 0, 4, -40, '#ff4655');
 
-  // ─── SITE B (enclosed) ───
-  addFloor(16, 14, 30, -28, mats.floorBSite);
-  addWall(16, 5, 0.5, 30, -35, mats.wallAccent);
-  addWall(0.5, 5, 14, 38, -28, mats.wallAccent);
-  addWall(0.5, 5, 14, 22, -28, mats.wallAccent);
-  addWall(0.5, 5, 5, 22, -23, mats.wallAccent);
-  addWall(0.5, 5, 5, 22, -33, mats.wallAccent);
-  addWall(5, 5, 0.5, 25, -21, mats.wallAccent);
-  addWall(5, 5, 0.5, 35, -21, mats.wallAccent);
-  addBox(2.5, 2.5, 2.5, 33, 0, -31, mats.siteBox);
-  addBox(3, 1.5, 1.5, 27, 0, -26, mats.crate);
-  addBox(1.5, 1.5, 3, 30, 0, -33, mats.crate);
-
-  createSiteLabel(scene, mapObjects, 'B', 30, 4.5, -28);
-  createAreaLabel(scene, mapObjects, 'SITE B', 30, 3, -24, '#ff4655');
-
-  // ─── DEFENDER BACK / link between sites ───
-  addFloor(40, 8, 0, -38, mats.floorDefault);
-  addWall(40, 4, 0.5, 0, -42, mats.wallDark);
-  addBox(4, 1.5, 2, -5, 0, -38, mats.crate);
-  addBox(4, 1.5, 2, 5, 0, -38, mats.crate);
-
-  createAreaLabel(scene, mapObjects, 'DEFENDER SPAWN', 0, 4, -40, '#ff4655');
-
-  // Decorative ceiling beams in sites (visual only)
-  addBox(14, 0.3, 0.4, -30, 4.5, -28, mats.wallGold, false);
-  addBox(14, 0.3, 0.4, 30, 4.5, -28, mats.wallGold, false);
-
-  // ─── Lighting ───
-  const hemi = new THREE.HemisphereLight(0xc8e0ff, 0x909880, 0.7);
-  scene.add(hemi);
-  mapObjects.push(hemi);
-
-  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-  scene.add(ambient);
-  mapObjects.push(ambient);
-
-  const sun = new THREE.DirectionalLight(0xfff8f0, 1.25);
-  sun.position.set(25, 55, 20);
+  // ── Lighting ──
+  scene.add(new THREE.HemisphereLight(0xd0e4ff, 0x909880, 0.75));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+  const sun = new THREE.DirectionalLight(0xfff8f0, 1.2);
+  sun.position.set(20, 50, 15);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 100;
-  sun.shadow.camera.left = -45;
-  sun.shadow.camera.right = 45;
-  sun.shadow.camera.top = 45;
-  sun.shadow.camera.bottom = -45;
+  sun.shadow.camera.set(-50, 50, 50, -50, 1, 100);
   scene.add(sun);
-  mapObjects.push(sun);
 
-  // Zone accent point lights
-  addZoneLight(scene, mapObjects, 0x0fb5ae, -30, 6, -28, 0.4);  // Site A
-  addZoneLight(scene, mapObjects, 0xff4655, 30, 6, -28, 0.4);   // Site B
-  addZoneLight(scene, mapObjects, 0xffc940, 0, 7, -2, 0.35);     // Mid
+  for (const [c, x, z] of [[0x0fb5ae, -26, -24], [0xff4655, 26, -24], [0xffc940, 0, -2]]) {
+    const pl = new THREE.PointLight(c, 0.45, 24);
+    pl.position.set(x, 6, z);
+    scene.add(pl);
+  }
 
   return {
     mapObjects,
@@ -250,101 +196,100 @@ export function buildMap(scene) {
     plantSites,
     spawnPoint,
     defenderSpawns: getDefenderSpawns(),
-    patrolPoints: getPatrolPoints(),
   };
 }
 
-function addZoneLight(scene, mapObjects, color, x, y, z, intensity) {
-  const light = new THREE.PointLight(color, intensity, 22);
-  light.position.set(x, y, z);
-  scene.add(light);
-  mapObjects.push(light);
+function label(scene, objs, text, x, y, z, color = '#fff') {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.font = 'bold 34px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 32);
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), m);
+  p.position.set(x, y, z);
+  scene.add(p);
+  objs.push(p);
 }
 
-function createSiteLabel(scene, mapObjects, text, x, y, z) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
+function siteLabel(scene, objs, text, x, y, z) {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const ctx = c.getContext('2d');
   ctx.fillStyle = '#ff4655';
   ctx.font = 'bold 80px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 64, 64);
-  const tex = new THREE.CanvasTexture(canvas);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 3.5), mat);
-  plane.position.set(x, y, z);
-  scene.add(plane);
-  mapObjects.push(plane);
-}
-
-function createAreaLabel(scene, mapObjects, text, x, y, z, color = '#ffffff') {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = color;
-  ctx.font = 'bold 36px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 256, 32);
-  const tex = new THREE.CanvasTexture(canvas);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(8, 1), mat);
-  plane.position.set(x, y, z);
-  scene.add(plane);
-  mapObjects.push(plane);
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 3.5), m);
+  p.position.set(x, y, z);
+  scene.add(p);
+  objs.push(p);
 }
 
 function getDefenderSpawns() {
   return [
-    new THREE.Vector3(-30, 1.6, -32),
-    new THREE.Vector3(30, 1.6, -32),
-    new THREE.Vector3(-30, 1.6, -24),
-    new THREE.Vector3(30, 1.6, -24),
+    new THREE.Vector3(-26, 1.6, -28),
+    new THREE.Vector3(26, 1.6, -28),
+    new THREE.Vector3(-26, 1.6, -20),
+    new THREE.Vector3(26, 1.6, -20),
     new THREE.Vector3(0, 1.6, -38),
   ];
 }
 
 export function getPatrolPoints() {
   return [
-    new THREE.Vector3(0, 1.6, -2),      // Mid
-    new THREE.Vector3(-22, 1.6, -10),   // A Main
-    new THREE.Vector3(-14, 1.6, -20), // A Short
-    new THREE.Vector3(-30, 1.6, -28), // Site A
-    new THREE.Vector3(22, 1.6, -10),  // B Main
-    new THREE.Vector3(14, 1.6, -20),  // B Short
-    new THREE.Vector3(30, 1.6, -28),  // Site B
-    new THREE.Vector3(0, 1.6, 15),      // Spawn corridor
+    new THREE.Vector3(0, 1.6, -2),
+    new THREE.Vector3(-22, 1.6, -14),
+    new THREE.Vector3(-10, 1.6, -16),
+    new THREE.Vector3(-26, 1.6, -24),
+    new THREE.Vector3(22, 1.6, -14),
+    new THREE.Vector3(10, 1.6, -16),
+    new THREE.Vector3(26, 1.6, -24),
+    new THREE.Vector3(0, 1.6, 17),
   ];
 }
 
-export function resolveCollision(pos, colliders, radius = 0.4) {
+/** Slide collision — pushes player out of walls without trapping in doorways. */
+export function resolveCollision(pos, colliders, radius = 0.35) {
   const result = pos.clone();
-  for (const c of colliders) {
-    const closest = new THREE.Vector3(
-      Math.max(c.min.x, Math.min(result.x, c.max.x)),
-      Math.max(c.min.y, Math.min(result.y, c.max.y)),
-      Math.max(c.min.z, Math.min(result.z, c.max.z))
-    );
-    const dist = result.distanceTo(closest);
-    if (dist < radius && dist > 0) {
-      const push = result.clone().sub(closest).normalize().multiplyScalar(radius - dist);
-      result.add(push);
-    }
-    if (result.x > c.min.x - radius && result.x < c.max.x + radius &&
-        result.z > c.min.z - radius && result.z < c.max.z + radius &&
-        result.y < c.max.y && result.y > c.min.y - 1) {
-      const dx = Math.min(Math.abs(result.x - c.min.x), Math.abs(result.x - c.max.x));
-      const dz = Math.min(Math.abs(result.z - c.min.z), Math.abs(result.z - c.max.z));
-      if (dx < dz) {
-        result.x = result.x < (c.min.x + c.max.x) / 2 ? c.min.x - radius : c.max.x + radius;
-      } else {
-        result.z = result.z < (c.min.z + c.max.z) / 2 ? c.min.z - radius : c.max.z + radius;
+
+  for (let pass = 0; pass < 4; pass++) {
+    for (const c of colliders) {
+      if (result.y > c.max.y + 0.5 || result.y < c.min.y - 1.5) continue;
+
+      const closestX = Math.max(c.min.x, Math.min(result.x, c.max.x));
+      const closestZ = Math.max(c.min.z, Math.min(result.z, c.max.z));
+      const dx = result.x - closestX;
+      const dz = result.z - closestZ;
+      const distSq = dx * dx + dz * dz;
+
+      if (distSq < radius * radius && distSq > 0.00001) {
+        const dist = Math.sqrt(distSq);
+        const push = (radius - dist) / dist;
+        result.x += dx * push;
+        result.z += dz * push;
+      } else if (distSq === 0) {
+        // Inside wall footprint — push out on smallest axis
+        const toLeft = result.x - c.min.x;
+        const toRight = c.max.x - result.x;
+        const toFront = result.z - c.min.z;
+        const toBack = c.max.z - result.z;
+        const min = Math.min(toLeft, toRight, toFront, toBack);
+        if (min === toLeft) result.x = c.min.x - radius;
+        else if (min === toRight) result.x = c.max.x + radius;
+        else if (min === toFront) result.z = c.min.z - radius;
+        else result.z = c.max.z + radius;
       }
     }
   }
+
   result.y = Math.max(1.6, result.y);
   return result;
 }
@@ -352,10 +297,10 @@ export function resolveCollision(pos, colliders, radius = 0.4) {
 export function checkLineOfSight(from, to, colliders) {
   const dir = to.clone().sub(from);
   const dist = dir.length();
+  if (dist < 0.01) return true;
   dir.normalize();
-  const step = 0.5;
-  for (let d = 0; d < dist; d += step) {
-    const p = from.clone().add(dir.clone().multiplyScalar(d));
+  for (let d = 0.5; d < dist; d += 0.5) {
+    const p = from.clone().addScaledVector(dir, d);
     for (const c of colliders) {
       if (p.x > c.min.x && p.x < c.max.x && p.y > c.min.y && p.y < c.max.y && p.z > c.min.z && p.z < c.max.z) {
         return false;

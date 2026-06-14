@@ -167,13 +167,8 @@ export class ViewModel {
     this.group.position.x += bobX * (1 - this.adsBlend);
     this.group.position.z += this.recoilOffset;
 
-    const rot = new THREE.Euler().setFromQuaternion(
-      new THREE.Quaternion().setFromEuler(this.hipRot).slerp(
-        new THREE.Quaternion().setFromEuler(this.adsRot),
-        this.adsBlend
-      )
-    );
-    this.group.rotation.copy(rot);
-    this.group.rotation.x -= this.recoilOffset * 2.5;
+    this.group.rotation.x = THREE.MathUtils.lerp(this.hipRot.x, this.adsRot.x, this.adsBlend) - this.recoilOffset * 2.5;
+    this.group.rotation.y = THREE.MathUtils.lerp(this.hipRot.y, this.adsRot.y, this.adsBlend);
+    this.group.rotation.z = THREE.MathUtils.lerp(this.hipRot.z, this.adsRot.z, this.adsBlend);
   }
 }

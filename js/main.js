@@ -1,40 +1,65 @@
 import { initMenu } from './menu.js';
-import { Game, showHUD } from './game.js';
-import { isBuyMenuOpen, closeBuyMenu } from './buyMenu.js';
-import { audio } from './audio.js';
 
 let game = null;
 let pointerLocked = false;
+let gameModule = null;
+let buyMenuModule = null;
+let audioModule = null;
 
-function init() {
+// Menu binds immediately — no Three.js dependency
+window.__startGame = startGame;
+initMenu(startGame);
+
+document.addEventListener('keydown', (e) => {
+  if (game?.running) game.onKeyDown(e.code);
+});
+
+document.addEventListener('pointerlockchange', () => {
   const canvas = document.getElementById('game-canvas');
-  game = new Game(canvas);
+  pointerLocked = document.pointerLockElement === canvas;
+});
 
-  initMenu(() => {
-    game.start();
-    canvas.addEventListener('click', onCanvasClick);
-  });
+document.addEventListener('mousemove', (e) => {
+  if (!pointerLocked || !game?.running || !game.player?.alive) return;
+  if (buyMenuModule?.isBuyMenuOpen()) return;
+  game.player.onMouseMove(e.movementX, e.movementY);
+});
 
-  document.addEventListener('keydown', (e) => {
-    if (game?.running) game.onKeyDown(e.code);
-  });
-
-  document.addEventListener('pointerlockchange', () => {
-    pointerLocked = document.pointerLockElement === canvas;
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (pointerLocked && game?.running && game.player?.alive && !isBuyMenuOpen()) {
-      game.player.onMouseMove(e.movementX, e.movementY);
-    }
-  });
+async function loadGameModules() {
+  if (!gameModule) {
+    [gameModule, buyMenuModule, audioModule] = await Promise.all([
+      import('./game.js'),
+      import('./buyMenu.js'),
+      import('./audio.js'),
+    ]);
+  }
+  return { gameModule, buyMenuModule, audioModule };
 }
 
-function onCanvasClick() {
-  if (game?.running && !isBuyMenuOpen()) {
-    audio.unlock();
-    game.requestPointerLock();
+async function startGame() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('hud')?.classList.remove('hidden');
+
+  try {
+    const { gameModule: gm, audioModule: am } = await loadGameModules();
+    const canvas = document.getElementById('game-canvas');
+
+    if (!game) {
+      game = new gm.Game(canvas);
+      canvas.addEventListener('click', () => {
+        if (game?.running && !buyMenuModule?.isBuyMenuOpen()) {
+          am.audio.unlock();
+          game.requestPointerLock();
+        }
+      });
+    }
+
+    game.start();
+    gm.setCanvasInteractive(true);
+  } catch (err) {
+    console.error('Failed to start game:', err);
+    alert('Could not start game: ' + err.message);
+    const gm = gameModule;
+    if (gm) gm.setCanvasInteractive(false);
   }
 }
-
-init();
