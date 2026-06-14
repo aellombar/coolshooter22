@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mouseDeltaToYaw, mouseDeltaToPitch, getScopedSensMultiplier } from './settings.js';
 import {
   createWeaponState, canFire, fireWeapon, getViewKick, getBulletSpread,
-  getCurrentInaccuracy,
+  getCurrentInaccuracy, applyArmorDamage,
   reloadWeapon, getReloadTime, getWeapon,
 } from './weapons.js';
 import { resolveCollision } from './map.js';
@@ -52,6 +52,8 @@ export class Player {
     this.planting = false;
     this.plantProgress = 0;
     this.plantDuration = 4.0;
+    this.hasSpike = true;
+    this.roundSpikePlanted = false;
 
     this._setupInput();
   }
@@ -80,6 +82,10 @@ export class Player {
     this.secondaryWeapon = createWeaponState('classic');
     this.activeSlot = 'secondary';
     this.armor = 0;
+    this.hasSpike = true;
+    this.roundSpikePlanted = false;
+    this.planting = false;
+    this.plantProgress = 0;
     this.isScoped = false;
     this.viewModel.setWeapon('classic');
     this._updateScopeUI();
@@ -236,13 +242,8 @@ export class Player {
 
   takeDamage(amount, hitZone = 'body') {
     if (!this.alive) return;
-    let dmg = amount;
-    if (this.armor > 0) {
-      const absorbed = Math.min(this.armor, dmg * 0.66);
-      this.armor -= absorbed;
-      dmg -= absorbed * 0.66;
-    }
-    this.health -= dmg;
+    const { healthDmg } = applyArmorDamage(amount, this);
+    this.health -= healthDmg;
     if (this.health <= 0) {
       this.health = 0;
       this.alive = false;
@@ -363,6 +364,23 @@ export class Player {
   }
 
   _updatePlanting(dt, plantSites) {
+    const plantPrompt = document.getElementById('plant-prompt');
+    const plantFill = document.getElementById('plant-fill');
+    const spikeHud = document.getElementById('spike-hud');
+
+    if (spikeHud) {
+      spikeHud.classList.toggle('hidden', !this.hasSpike || this.roundSpikePlanted);
+      spikeHud.classList.toggle('planted', this.roundSpikePlanted);
+    }
+
+    if (!this.hasSpike || this.roundSpikePlanted) {
+      this.planting = false;
+      this.plantProgress = 0;
+      plantPrompt?.classList.add('hidden');
+      if (plantFill) plantFill.style.width = '0%';
+      return;
+    }
+
     let nearSite = null;
     for (const key of ['A', 'B']) {
       const site = plantSites[key];
@@ -372,21 +390,31 @@ export class Player {
       }
     }
 
-    const plantPrompt = document.getElementById('plant-prompt');
-    if (nearSite && this.keys['Digit4']) {
-      this.planting = true;
-      this.plantProgress += dt;
-      plantPrompt.classList.remove('hidden');
+    if (nearSite) {
+      plantPrompt?.classList.remove('hidden');
       document.getElementById('site-label').textContent = nearSite.label;
+      if (this.keys['Digit4']) {
+        this.planting = true;
+        this.plantProgress += dt;
+      } else {
+        this.planting = false;
+        this.plantProgress = Math.max(0, this.plantProgress - dt * 2);
+      }
+      const pct = Math.min(100, (this.plantProgress / this.plantDuration) * 100);
+      if (plantFill) plantFill.style.width = `${pct}%`;
       if (this.plantProgress >= this.plantDuration) {
         this.planting = false;
         this.plantProgress = 0;
+        this.hasSpike = false;
+        this.roundSpikePlanted = true;
+        if (plantFill) plantFill.style.width = '0%';
         if (this.onPlant) this.onPlant(nearSite);
       }
     } else {
       this.planting = false;
       this.plantProgress = 0;
-      plantPrompt.classList.add('hidden');
+      plantPrompt?.classList.add('hidden');
+      if (plantFill) plantFill.style.width = '0%';
     }
   }
 
@@ -428,12 +456,12 @@ export function raycastHit(origin, direction, targets, maxDist = 150, blockers =
     while (obj) {
       const bot = obj.userData?.bot;
       if (bot?.alive) {
-        const bodyY = bot.mesh.position.y;
-        const headY = bodyY + 1.55;
-        const legY = bodyY + 0.35;
-        let hitZone = 'body';
-        if (hit.point.y >= headY) hitZone = 'head';
-        else if (hit.point.y <= legY) hitZone = 'leg';
+        let hitZone = hit.object.userData?.hitZone ?? 'body';
+        if (!hit.object.userData?.hitZone) {
+          const bodyY = bot.mesh.position.y;
+          if (hit.point.y >= bodyY + 1.45) hitZone = 'head';
+          else if (hit.point.y <= bodyY + 0.25) hitZone = 'leg';
+        }
         return { target: bot, hit, hitZone, distance: hit.distance };
       }
       obj = obj.parent;
@@ -464,4 +492,37 @@ export function createHitMarker() {
     scopeHit.classList.add('flash');
     setTimeout(() => scopeHit.classList.remove('flash'), 80);
   }
+}
+
+/** Ray vs sphere — returns distance along ray or null. */
+function raySphereDist(origin, dir, center, radius) {
+  const oc = origin.clone().sub(center);
+  const b = oc.dot(dir);
+  const c = oc.lengthSq() - radius * radius;
+  const disc = b * b - c;
+  if (disc < 0) return null;
+  const t = -b - Math.sqrt(disc);
+  return t > 0.01 ? t : (-b + Math.sqrt(disc) > 0.01 ? -b + Math.sqrt(disc) : null);
+}
+
+/** Hitscan against player capsule (head/body/leg zones). */
+export function raycastPlayer(origin, direction, player, maxDist = 60) {
+  if (!player?.alive) return null;
+  const dir = direction.clone().normalize();
+  const eye = player.position;
+  const headCenter = new THREE.Vector3(eye.x, eye.y + 0.06, eye.z);
+  const bodyCenter = new THREE.Vector3(eye.x, eye.y - 0.42, eye.z);
+  const legCenter = new THREE.Vector3(eye.x, eye.y - 0.78, eye.z);
+
+  const candidates = [
+    { zone: 'head', dist: raySphereDist(origin, dir, headCenter, 0.17) },
+    { zone: 'body', dist: raySphereDist(origin, dir, bodyCenter, 0.36) },
+    { zone: 'leg', dist: raySphereDist(origin, dir, legCenter, 0.28) },
+  ].filter(c => c.dist !== null && c.dist < maxDist);
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.dist - b.dist);
+  const best = candidates[0];
+  const hitPoint = origin.clone().addScaledVector(dir, best.dist);
+  return { hitZone: best.zone, distance: best.dist, point: hitPoint };
 }

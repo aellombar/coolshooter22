@@ -464,3 +464,26 @@ export function getReloadTime(weaponId) {
   };
   return times[weaponId] || 2.0;
 }
+
+/** Valorant weapon damage for hit zone (values already tuned per zone). */
+export function getWeaponDamage(weaponDef, hitZone = 'body') {
+  if (hitZone === 'head') return weaponDef.damage.head;
+  if (hitZone === 'leg') return weaponDef.damage.leg;
+  return weaponDef.damage.body;
+}
+
+/**
+ * Apply Valorant-style armor absorption.
+ * @returns {{ healthDmg: number, armorUsed: number }}
+ */
+export function applyArmorDamage(rawDamage, armorHolder) {
+  let dmg = rawDamage;
+  let armorUsed = 0;
+  if (armorHolder.armor > 0) {
+    const absorbed = Math.min(armorHolder.armor, dmg * 0.66);
+    armorHolder.armor -= absorbed;
+    armorUsed = absorbed;
+    dmg -= absorbed * 0.66;
+  }
+  return { healthDmg: dmg, armorUsed };
+}

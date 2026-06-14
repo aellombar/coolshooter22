@@ -149,8 +149,8 @@ export function buildMap(scene) {
   label(scene, mapObjects, 'SITE A', -26, 3, -20, '#0fb5ae');
 
   const plantSites = {
-    A: { center: new THREE.Vector3(-26, 0, -24), radius: 6, label: 'A' },
-    B: { center: new THREE.Vector3(26, 0, -24), radius: 6, label: 'B' },
+    A: { center: new THREE.Vector3(-26, 0, -24), radius: 8, label: 'A' },
+    B: { center: new THREE.Vector3(26, 0, -24), radius: 8, label: 'B' },
   };
 
   // ── B MAIN: mid east → site B ──

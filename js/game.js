@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { buildMap } from './map.js';
-import { Player, raycastHit, createBulletTracer, createHitMarker } from './player.js';
+import { Player, raycastHit, raycastPlayer, createBulletTracer, createHitMarker } from './player.js';
 import { createBotTeam, addKillFeed } from './bots.js';
 import { applyValorantFov, horizontalToVerticalFov, VALORANT_H_FOV } from './settings.js';
 import { toggleBuyMenu, isBuyMenuOpen, closeBuyMenu, initBuyMenu, updateBuyCredits } from './buyMenu.js';
+import { getWeaponDamage } from './weapons.js';
 import { audio } from './audio.js';
 
 export class Game {
@@ -84,7 +85,7 @@ export class Game {
     audio.unlock();
 
     this._updateHUD();
-    this._showOverlay('ROUND 1 — BUY PHASE', 2500);
+    this._showOverlay('ROUND 1 — BUY PHASE · You have the SPIKE (hold [4] at Site A or B)', 4000);
     setTimeout(() => { this.roundPhase = 'combat'; }, 3000);
 
     this.running = true;
@@ -116,8 +117,15 @@ export class Game {
       this.player.update(dt, this.plantSites);
     }
 
+    // Prioritize closest 2 bots for shooting (others hold angle but don't beam)
+    const livingBots = (this.bots ?? []).filter(b => b.alive);
+    livingBots.sort((a, b) =>
+      a.position.distanceTo(this.player.position) - b.position.distanceTo(this.player.position)
+    );
+    const shootRank = new Map(livingBots.map((b, i) => [b.id, i]));
+
     for (const bot of this.bots ?? []) {
-      const shot = bot.update(dt, this.player, this.colliders);
+      const shot = bot.update(dt, this.player, this.colliders, shootRank.get(bot.id) ?? 99);
       if (shot) this._handleBotShot(shot);
     }
 
@@ -157,7 +165,7 @@ export class Game {
     createBulletTracer(this.scene, muzzle, direction, maxDist, hitPoint);
 
     if (hit) {
-      const dmg = weaponDef.damage[hit.hitZone] || weaponDef.damage.body;
+      const dmg = getWeaponDamage(weaponDef, hit.hitZone);
       hit.target.takeDamage(dmg, hit.hitZone);
       createHitMarker();
 
@@ -170,23 +178,21 @@ export class Game {
 
   _handleBotShot(shot) {
     if (!this.player.alive) return;
-    const dist = shot.origin.distanceTo(this.player.position);
-    if (dist > 40) return;
 
-    const hitChance = Math.max(0.1, 1 - dist / 40);
-    if (Math.random() > hitChance) return;
+    const hit = raycastPlayer(shot.origin, shot.direction, this.player, 50);
+    if (!hit) return;
 
-    const hitZone = Math.random() < 0.15 ? 'head' : 'body';
-    const dmg = shot.damage[hitZone] || shot.damage.body;
-    this.player.takeDamage(dmg * 0.35, hitZone);
+    const dmg = getWeaponDamage(shot.weaponDef, hit.hitZone);
+    this.player.takeDamage(dmg, hit.hitZone);
 
     if (!this.player.alive) {
-      addKillFeed(shot.shooter.name, 'You', 'Vandal');
+      addKillFeed(shot.shooter.name, 'You', shot.weaponDef.name);
     }
   }
 
   _handlePlant(site) {
     this.spikePlanted = true;
+    this.player.roundSpikePlanted = true;
     this._showOverlay(`SPIKE PLANTED AT ${site.label}`, 2000);
     this.roundTimer = Math.min(this.roundTimer, 45);
   }
@@ -228,12 +234,14 @@ export class Game {
 
     this.player.spawn(this.spawnPoint);
     this.player.credits = Math.min(this.player.credits + 3000, 9000);
+    this.player.hasSpike = true;
+    this.player.roundSpikePlanted = false;
 
     for (let i = 0; i < this.bots.length; i++) {
       this.bots[i].spawn(this.defenderSpawns[i]);
     }
 
-    this._showOverlay(`ROUND ${this.round} — BUY PHASE`, 2500);
+    this._showOverlay(`ROUND ${this.round} — BUY PHASE · Plant the spike at A or B`, 3500);
     setTimeout(() => { this.roundPhase = 'combat'; }, 3000);
   }
 

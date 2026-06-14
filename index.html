@@ -100,7 +100,14 @@
         </div>
       </div>
       <div id="kill-feed"></div>
-      <div id="plant-prompt" class="hidden">Hold [4] to plant spike at Site <span id="site-label">A</span></div>
+      <div id="spike-hud" class="spike-hud">
+        <div class="spike-icon" aria-hidden="true"></div>
+        <span class="spike-label">SPIKE</span>
+      </div>
+      <div id="plant-prompt" class="hidden">
+        <span class="plant-text">Hold <kbd>4</kbd> to plant spike at Site <span id="site-label">A</span></span>
+        <div id="plant-bar" class="plant-bar"><div id="plant-fill" class="plant-fill"></div></div>
+      </div>
     </div>
 
     <!-- Buy Menu -->
