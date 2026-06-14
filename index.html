@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tactical Shooter</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Main Menu -->
+    <div id="main-menu" class="screen active">
+      <div class="menu-panel">
+        <h1 class="game-title">TACTICAL SHOOTER</h1>
+        <p class="subtitle">Valorant-style sensitivity &amp; gunplay</p>
+        <button class="menu-btn primary" id="btn-play">PLAY</button>
+        <button class="menu-btn" id="btn-settings">SETTINGS</button>
+      </div>
+    </div>
+
+    <!-- Map Select -->
+    <div id="map-select" class="screen">
+      <div class="menu-panel wide">
+        <h2>SELECT MAP</h2>
+        <div class="map-grid">
+          <div class="map-card selected" data-map="haven-lite">
+            <div class="map-preview haven"></div>
+            <h3>Haven Lite</h3>
+            <p>2 sites · 5v1 practice</p>
+          </div>
+        </div>
+        <div class="menu-actions">
+          <button class="menu-btn" id="btn-back-main">BACK</button>
+          <button class="menu-btn primary" id="btn-start-game">START</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="settings-menu" class="screen">
+      <div class="menu-panel">
+        <h2>SETTINGS</h2>
+        <div class="setting-row">
+          <label for="sens-slider">Mouse Sensitivity</label>
+          <span id="sens-value">0.50</span>
+        </div>
+        <input type="range" id="sens-slider" min="0.1" max="10" step="0.01" value="0.5">
+        <p class="setting-hint">Uses Valorant sensitivity formula (0.07° per count × sens)</p>
+        <div class="setting-row">
+          <label for="fov-slider">Field of View</label>
+          <span id="fov-value">103</span>
+        </div>
+        <input type="range" id="fov-slider" min="80" max="120" step="1" value="103">
+        <div class="setting-row">
+          <label for="invert-y">Invert Y-Axis</label>
+          <input type="checkbox" id="invert-y">
+        </div>
+        <div class="menu-actions">
+          <button class="menu-btn" id="btn-back-settings">BACK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="score-bar">
+          <span class="team-score attack">0</span>
+          <span class="round-info">ROUND <span id="round-num">1</span></span>
+          <span class="team-score defend">0</span>
+        </div>
+        <div class="credits">₵ <span id="credits">800</span></div>
+      </div>
+      <div class="crosshair" id="crosshair">
+        <div class="ch-line top"></div>
+        <div class="ch-line bottom"></div>
+        <div class="ch-line left"></div>
+        <div class="ch-line right"></div>
+        <div class="ch-dot"></div>
+      </div>
+      <div class="hud-bottom">
+        <div class="weapon-info">
+          <span id="weapon-name">Classic</span>
+          <span id="ammo-count">12 / 36</span>
+        </div>
+        <div class="health-bar">
+          <div class="health-fill" id="health-fill"></div>
+          <span id="health-text">100</span>
+        </div>
+      </div>
+      <div id="kill-feed"></div>
+      <div id="plant-prompt" class="hidden">Hold [4] to plant spike at Site <span id="site-label">A</span></div>
+    </div>
+
+    <!-- Buy Menu -->
+    <div id="buy-menu" class="hidden">
+      <div class="buy-panel">
+        <h2>BUY MENU <span class="buy-key">[B]</span></h2>
+        <div class="buy-categories">
+          <button class="buy-tab active" data-cat="sidearms">Sidearms</button>
+          <button class="buy-tab" data-cat="smgs">SMGs</button>
+          <button class="buy-tab" data-cat="rifles">Rifles</button>
+          <button class="buy-tab" data-cat="snipers">Snipers</button>
+          <button class="buy-tab" data-cat="armor">Armor</button>
+        </div>
+        <div class="buy-grid" id="buy-grid"></div>
+        <p class="buy-hint">Click to buy · Credits: ₵<span id="buy-credits">800</span></p>
+      </div>
+    </div>
+
+    <!-- Pause / Death overlay -->
+    <div id="overlay-msg" class="hidden">
+      <p id="overlay-text"></p>
+    </div>
+
+    <!-- Game canvas -->
+    <canvas id="game-canvas"></canvas>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
